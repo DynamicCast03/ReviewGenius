@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8" />
+  <title>试题生成系统</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      padding: 20px;
+      background-color: #f8f8f8;
+    }
+    .container {
+      max-width: 800px;
+      margin: auto;
+      background: white;
+      padding: 20px;
+      border-radius: 12px;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+    }
+    section {
+      margin-bottom: 20px;
+    }
+    textarea, input[type="number"] {
+      width: 100%;
+      padding: 10px;
+      font-size: 14px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      box-sizing: border-box;
+    }
+    #preview {
+      white-space: pre-wrap;
+      background: #f0f0f0;
+      padding: 10px;
+      border-radius: 6px;
+      min-height: 100px;
+    }
+    button {
+      padding: 10px 20px;
+      font-size: 16px;
+      border: none;
+      border-radius: 6px;
+      background-color: #007BFF;
+      color: white;
+      cursor: pointer;
+    }
+    button:disabled {
+      background-color: #aaa;
+      cursor: not-allowed;
+    }
+    ul#fileList {
+      list-style: none;
+      padding-left: 0;
+    }
+    ul#fileList li {
+      margin: 5px 0;
+    }
+    .question-settings {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    .question-settings label {
+      display: block;
+      margin-bottom: 4px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>试题生成系统</h1>
+
+    <section>
+      <h2>上传文件</h2>
+      <input type="file" id="fileInput" />
+      <ul id="fileList"></ul>
+    </section>
+
+    <section>
+      <h2>输入需求</h2>
+      <textarea id="userInput" placeholder="请输入生成试题的要求，如知识点、题型、难度等级等..."></textarea>
+    </section>
+
+    <section>
+      <h2>题型设置</h2>
+      <div class="question-settings">
+        <div>
+          <label>选择题数量</label>
+          <input type="number" id="choiceCount" min="0" value="0" />
+        </div>
+        <div>
+          <label>每题分值</label>
+          <input type="number" id="choiceScore" min="0" value="0" />
+        </div>
+        <div>
+          <label>填空题数量</label>
+          <input type="number" id="blankCount" min="0" value="0" />
+        </div>
+        <div>
+          <label>每题分值</label>
+          <input type="number" id="blankScore" min="0" value="0" />
+        </div>
+        <div>
+          <label>简答题数量</label>
+          <input type="number" id="shortCount" min="0" value="0" />
+        </div>
+        <div>
+          <label>每题分值</label>
+          <input type="number" id="shortScore" min="0" value="0" />
+        </div>
+        <div>
+          <label>计算题数量</label>
+          <input type="number" id="calcCount" min="0" value="0" />
+        </div>
+        <div>
+          <label>每题分值</label>
+          <input type="number" id="calcScore" min="0" value="0" />
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <button id="submitBtn">提交处理</button>
+    </section>
+
+    <section>
+      <h2>4. 输出预览（逐字生成）</h2>
+      <div id="preview">等待生成中...</div>
+    </section>
+
+    <section>
+      <button id="downloadBtn" disabled>下载生成试卷</button>
+    </section>
+  </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const fileInput = document.getElementById('fileInput');
+      const fileList = document.getElementById('fileList');
+      const filesArray = [];
+
+      fileInput.addEventListener('change', () => {
+        if (fileInput.files.length > 0) {
+          Array.from(fileInput.files).forEach(file => {
+            filesArray.push(file);
+            const li = document.createElement('li');
+            li.textContent = file.name + ' (' + Math.round(file.size / 1024) + ' KB)';
+            fileList.appendChild(li);
+          });
+          fileInput.value = '';
+        }
+      });
+
+      document.getElementById('submitBtn').onclick = async () => {
+        const preview = document.getElementById('preview');
+        const submitBtn = document.getElementById('submitBtn');
+        const downloadBtn = document.getElementById('downloadBtn');
+
+        preview.innerText = '正在生成试题，请稍候...\n';
+        submitBtn.disabled = true;
+        downloadBtn.disabled = true;
+
+        const formData = new FormData();
+        filesArray.forEach((file, idx) => {
+          formData.append(`file${idx}`, file);
+        });
+
+        const userInput = document.getElementById('userInput').value;
+        formData.append("user_input", userInput);
+
+        const types = ["choice", "blank", "short", "calc"];
+        types.forEach(type => {
+          const count = document.getElementById(`${type}Count`).value;
+          const score = document.getElementById(`${type}Score`).value;
+          formData.append(`${type}_count`, count);
+          formData.append(`${type}_score`, score);
+        });
+
+        try {
+          const response = await fetch('/api/process', {
+            method: 'POST',
+            body: formData
+          });
+
+          if (!response.ok) {
+            const err_msg = await response.json();
+            throw new Error(err_msg.error || "后端接口错误");
+          }
+
+          preview.innerText = '';
+
+          const reader = response.body.getReader();
+          const decoder = new TextDecoder('utf-8');
+
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) {
+              break;
+            }
+            const chunk = decoder.decode(value, { stream: true });
+            preview.innerText += chunk;
+          }
+
+          downloadBtn.disabled = false;
+
+        } catch (err) {
+          preview.innerText = '发生错误：' + err.message;
+        } finally {
+          submitBtn.disabled = false;
+        }
+      };
+
+      document.getElementById('downloadBtn').onclick = () => {
+        const blob = new Blob([document.getElementById('preview').innerText], { type: 'text/plain;charset=utf-8' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = '试卷预览.txt';
+        a.click();
+      };
+    });
+  </script>
+</body>
+</html>
