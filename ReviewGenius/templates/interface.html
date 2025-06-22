@@ -78,6 +78,11 @@
     </section>
 
     <section>
+      <h2>API密钥</h2>
+      <input type="password" id="apiKey" placeholder="请输入你的SiliconFlow API Key" style="width: 100%; padding: 10px; box-sizing: border-box;" />
+    </section>
+
+    <section>
       <h2>输入需求</h2>
       <textarea id="userInput" placeholder="请输入生成试题的要求，如知识点、题型、难度等级等..."></textarea>
     </section>
@@ -168,6 +173,14 @@
 
         const userInput = document.getElementById('userInput').value;
         formData.append("user_input", userInput);
+
+        const apiKey = document.getElementById('apiKey').value;
+        if (!apiKey) {
+          preview.innerText = '错误：请输入API Key。';
+          submitBtn.disabled = false;
+          return;
+        }
+        formData.append("api_key", apiKey);
 
         const types = ["choice", "blank", "short", "calc"];
         types.forEach(type => {
