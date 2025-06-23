@@ -9,13 +9,13 @@ def invoke_llm(
     stream: bool = False,
 ) -> Union[Generator[str, None, None], str]:
     """
-    调用硅基流动（SiliconFlow）的大语言模型。
+    Invokes the SiliconFlow Large Language Model.
 
-    :param api_key: 你的 SiliconFlow API 密钥。
-    :param model: 要使用的模型名称。
-    :param messages: 对话消息列表。
-    :param stream: 是否以流式方式返回响应。
-    :return: 如果 stream 为 True，则返回一个生成器；否则返回一个包含完整响应的字符串。
+    :param api_key: Your SiliconFlow API key.
+    :param model: The name of the model to use.
+    :param messages: A list of message dictionaries.
+    :param stream: Whether to return the response as a stream.
+    :return: A generator if stream is True, otherwise a string with the full response.
     """
     client = OpenAI(api_key=api_key, base_url="https://api.siliconflow.cn/v1")
 

@@ -1,4 +1,5 @@
 import os
+import json
 from flask import (
     Flask,
     request,
@@ -6,10 +7,13 @@ from flask import (
     render_template,
     jsonify,
 )
+from openai import AuthenticationError
 from werkzeug.utils import secure_filename
 from filter import sanitizer
 import prompt_manager
 import siliconflow_client
+from llm_json_parser import stream_json_with_events
+from question_types import Question # Import base class for validation
 
 app = Flask(__name__)
 
@@ -45,13 +49,17 @@ def generate_exam():
         if not api_key:
             return jsonify({"error": "API Key缺失"}), 400
 
+        # 合并简答题和计算题
+        short_answer_count = int(request.form.get("short_count", "0")) + int(
+            request.form.get("calc_count", "0")
+        )
+
         question_settings = {
             "选择题": request.form.get("choice_count", "0"),
             "填空题": request.form.get("blank_count", "0"),
-            "简答题": request.form.get("short_count", "0"),
-            "计算题": request.form.get("calc_count", "0"),
+            "简答题": str(short_answer_count),
         }
-        
+
         question_types_str = "、".join(
             [f"{k}{v}道" for k, v in question_settings.items() if int(v) > 0]
         )
@@ -69,15 +77,40 @@ def generate_exam():
         
         messages = [{"role": "user", "content": prompt}]
 
-        # 使用我们创建的客户端进行流式调用
-        llm_stream = siliconflow_client.invoke_llm(
-            api_key=api_key,
-            model="Qwen/Qwen2.5-72B-Instruct",
-            messages=messages,
-            stream=True,
-        )
+        def generate_question_stream():
+            try:
+                # 使用我们创建的客户端进行流式调用
+                llm_stream = siliconflow_client.invoke_llm(
+                    api_key=api_key,
+                    model="Qwen/Qwen2.5-72B-Instruct",
+                    messages=messages,
+                    stream=True,
+                )
+                
+                # 使用新的事件生成器
+                event_stream = stream_json_with_events(llm_stream)
 
-        return Response(llm_stream, mimetype="text/plain")
+                for event in event_stream:
+                    if event["type"] == "end":
+                        # 在结束后验证数据结构
+                        try:
+                            question_obj = Question.from_dict(event["data"])
+                            # 将验证和转换后的数据放回事件中
+                            event["data"] = question_obj.to_dict()
+                        except (ValueError, KeyError) as e:
+                            # 如果数据格式错误，可以跳过或发送一个错误事件
+                            print(f"Skipping invalid question object: {e}, data: {event['data']}")
+                            continue # 不发送这个 'end' 事件
+                    
+                    yield json.dumps(event) + "\\n"
+
+            except AuthenticationError:
+                yield json.dumps({"type": "error", "error": "API Key 无效或已过期，请检查您的输入。", "error_type": "authentication"}) + "\\n"
+            except Exception as e:
+                # 捕获其他流式过程中的错误
+                yield json.dumps({"type": "error", "error": f"生成过程中发生错误: {str(e)}", "error_type": "generation"}) + "\\n"
+
+        return Response(generate_question_stream(), mimetype="application/x-ndjson")
 
     except Exception as e:
         error_msg = f"处理时出错: {str(e)}"

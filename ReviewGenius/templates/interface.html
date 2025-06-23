@@ -1,237 +1,340 @@
 <!DOCTYPE html>
 <html lang="zh">
-<head>
-  <meta charset="UTF-8" />
-  <title>试题生成系统</title>
-  <style>
-    body {
-      font-family: sans-serif;
-      padding: 20px;
-      background-color: #f8f8f8;
-    }
-    .container {
-      max-width: 800px;
-      margin: auto;
-      background: white;
-      padding: 20px;
-      border-radius: 12px;
-      box-shadow: 0 4px 10px rgba(0,0,0,0.1);
-    }
-    section {
-      margin-bottom: 20px;
-    }
-    textarea, input[type="number"] {
-      width: 100%;
-      padding: 10px;
-      font-size: 14px;
-      border: 1px solid #ccc;
-      border-radius: 6px;
-      box-sizing: border-box;
-    }
-    #preview {
-      white-space: pre-wrap;
-      background: #f0f0f0;
-      padding: 10px;
-      border-radius: 6px;
-      min-height: 100px;
-    }
-    button {
-      padding: 10px 20px;
-      font-size: 16px;
-      border: none;
-      border-radius: 6px;
-      background-color: #007BFF;
-      color: white;
-      cursor: pointer;
-    }
-    button:disabled {
-      background-color: #aaa;
-      cursor: not-allowed;
-    }
-    ul#fileList {
-      list-style: none;
-      padding-left: 0;
-    }
-    ul#fileList li {
-      margin: 5px 0;
-    }
-    .question-settings {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 10px;
-      margin-bottom: 10px;
-    }
-    .question-settings label {
-      display: block;
-      margin-bottom: 4px;
-    }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <h1>试题生成系统</h1>
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>ReviewGenius - 智能出题</title>
+		<link
+			href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+			rel="stylesheet"
+		/>
+		<style>
+			body {
+				background-color: #f8f9fa;
+			}
+			.container {
+				max-width: 1200px;
+			}
+			.card-header strong {
+				font-size: 1.1rem;
+			}
+		</style>
+	</head>
+	<body>
+		<div class="container mt-5">
+			<div class="text-center mb-5">
+				<h1>ReviewGenius 智能出题系统</h1>
+				<p class="lead">
+					上传您的学习资料，选择题型和数量，即可生成一份高质量的练习卷。
+				</p>
+			</div>
 
-    <section>
-      <h2>上传文件</h2>
-      <input type="file" id="fileInput" />
-      <ul id="fileList"></ul>
-    </section>
+			<div class="row g-5">
+				<div class="col-md-4">
+					<form id="generate-form">
+						<div class="mb-3">
+							<label for="file-upload" class="form-label fw-bold"
+								>1. 上传学习材料</label
+							>
+							<input
+								type="file"
+								class="form-control"
+								id="file-upload"
+								name="file0"
+								required
+							/>
+						</div>
+						<div class="mb-3">
+							<label for="api_key" class="form-label fw-bold"
+								>2. 输入API Key</label
+							>
+							<input
+								type="password"
+								class="form-control"
+								id="api_key"
+								name="api_key"
+								placeholder="请输入 SiliconFlow API Key"
+								required
+							/>
+						</div>
+						<div class="mb-3">
+							<label for="user_input" class="form-label fw-bold"
+								>3. 输入额外要求 (可选)</label
+							>
+							<textarea
+								class="form-control"
+								id="user_input"
+								name="user_input"
+								rows="3"
+								placeholder="例如：请侧重于XX章节的知识点"
+							></textarea>
+						</div>
+						<div class="mb-4">
+							<label class="form-label fw-bold">4. 设置题型和数量</label>
+							<div class="row g-2">
+								<div class="col">
+									<label for="choice_count" class="form-label"
+										>选择题</label
+									>
+									<input
+										type="number"
+										class="form-control"
+										id="choice_count"
+										name="choice_count"
+										value="2"
+										min="0"
+									/>
+								</div>
+								<div class="col">
+									<label for="blank_count" class="form-label"
+										>填空题</label
+									>
+									<input
+										type="number"
+										class="form-control"
+										id="blank_count"
+										name="blank_count"
+										value="2"
+										min="0"
+									/>
+								</div>
+								<div class="col">
+									<label for="short_count" class="form-label"
+										>简答/计算题</label
+									>
+									<input
+										type="number"
+										class="form-control"
+										id="short_count"
+										name="short_count"
+										value="1"
+										min="0"
+									/>
+								</div>
+								<input
+									type="hidden"
+									id="calc_count"
+									name="calc_count"
+									value="0"
+								/>
+							</div>
+						</div>
+						<button
+							type="submit"
+							class="btn btn-primary w-100 btn-lg"
+							id="generate-btn"
+						>
+							<span
+								class="spinner-border spinner-border-sm d-none"
+								role="status"
+								aria-hidden="true"
+							></span>
+							生成试卷
+						</button>
+					</form>
+				</div>
 
-    <section>
-      <h2>API密钥</h2>
-      <input type="password" id="apiKey" placeholder="请输入你的SiliconFlow API Key" style="width: 100%; padding: 10px; box-sizing: border-box;" />
-    </section>
+				<div class="col-md-8">
+					<h4>生成的题目</h4>
+					<div
+						id="questions-container"
+						class="mt-3"
+						style="min-height: 400px"
+					>
+						<!-- 流式生成的卡片将出现在这里 -->
+						<div
+							class="alert alert-secondary text-center"
+							id="start-generation-placeholder"
+						>
+							点击"生成试卷"开始出题
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
 
-    <section>
-      <h2>输入需求</h2>
-      <textarea id="userInput" placeholder="请输入生成试题的要求，如知识点、题型、难度等级等..."></textarea>
-    </section>
+		<script>
+			document
+				.getElementById("generate-form")
+				.addEventListener("submit", async function (event) {
+					event.preventDefault();
 
-    <section>
-      <h2>题型设置</h2>
-      <div class="question-settings">
-        <div>
-          <label>选择题数量</label>
-          <input type="number" id="choiceCount" min="0" value="0" />
-        </div>
-        <div>
-          <label>每题分值</label>
-          <input type="number" id="choiceScore" min="0" value="0" />
-        </div>
-        <div>
-          <label>填空题数量</label>
-          <input type="number" id="blankCount" min="0" value="0" />
-        </div>
-        <div>
-          <label>每题分值</label>
-          <input type="number" id="blankScore" min="0" value="0" />
-        </div>
-        <div>
-          <label>简答题数量</label>
-          <input type="number" id="shortCount" min="0" value="0" />
-        </div>
-        <div>
-          <label>每题分值</label>
-          <input type="number" id="shortScore" min="0" value="0" />
-        </div>
-        <div>
-          <label>计算题数量</label>
-          <input type="number" id="calcCount" min="0" value="0" />
-        </div>
-        <div>
-          <label>每题分值</label>
-          <input type="number" id="calcScore" min="0" value="0" />
-        </div>
-      </div>
-    </section>
+					const generateBtn = document.getElementById("generate-btn");
+					const spinner = generateBtn.querySelector(".spinner-border");
+					const questionsContainer =
+						document.getElementById("questions-container");
+					const placeholder = document.getElementById(
+						"start-generation-placeholder"
+					);
 
-    <section>
-      <button id="submitBtn">提交处理</button>
-    </section>
+					generateBtn.disabled = true;
+					spinner.classList.remove("d-none");
+					if (placeholder) {
+						placeholder.remove();
+					}
+					questionsContainer.innerHTML =
+						'<p class="text-center text-primary">正在连接模型，请稍候...</p>';
 
-    <section>
-      <h2>4. 输出预览（逐字生成）</h2>
-      <div id="preview">等待生成中...</div>
-    </section>
+					const formData = new FormData(this);
 
-    <section>
-      <button id="downloadBtn" disabled>下载生成试卷</button>
-    </section>
-  </div>
+					try {
+						const response = await fetch("/api/process", {
+							method: "POST",
+							body: formData,
+						});
 
-  <script>
-    document.addEventListener('DOMContentLoaded', () => {
-      const fileInput = document.getElementById('fileInput');
-      const fileList = document.getElementById('fileList');
-      const filesArray = [];
+						if (!response.ok) {
+							const errorData = await response.json();
+							throw new Error(
+								errorData.error || `HTTP error! status: ${response.status}`
+							);
+						}
 
-      fileInput.addEventListener('change', () => {
-        if (fileInput.files.length > 0) {
-          Array.from(fileInput.files).forEach(file => {
-            filesArray.push(file);
-            const li = document.createElement('li');
-            li.textContent = file.name + ' (' + Math.round(file.size / 1024) + ' KB)';
-            fileList.appendChild(li);
-          });
-          fileInput.value = '';
-        }
-      });
+						questionsContainer.innerHTML = ""; // 清空等待提示
 
-      document.getElementById('submitBtn').onclick = async () => {
-        const preview = document.getElementById('preview');
-        const submitBtn = document.getElementById('submitBtn');
-        const downloadBtn = document.getElementById('downloadBtn');
+						const reader = response.body.getReader();
+						const decoder = new TextDecoder();
+						let buffer = "";
+						let questionCounter = 1;
+						let currentCard = null;
+						let currentCardBody = null;
 
-        preview.innerText = '正在生成试题，请稍候...\n';
-        submitBtn.disabled = true;
-        downloadBtn.disabled = true;
+						while (true) {
+							const { done, value } = await reader.read();
+							if (done) {
+								break;
+							}
 
-        const formData = new FormData();
-        filesArray.forEach((file, idx) => {
-          formData.append(`file${idx}`, file);
-        });
+							buffer += decoder.decode(value, { stream: true });
+							// \\n is used as a separator by the backend
+							const lines = buffer.split("\\n");
 
-        const userInput = document.getElementById('userInput').value;
-        formData.append("user_input", userInput);
+							buffer = lines.pop(); // 保留可能不完整的行
 
-        const apiKey = document.getElementById('apiKey').value;
-        if (!apiKey) {
-          preview.innerText = '错误：请输入API Key。';
-          submitBtn.disabled = false;
-          return;
-        }
-        formData.append("api_key", apiKey);
+							for (const line of lines) {
+								if (line.trim()) {
+									try {
+										const event = JSON.parse(line);
 
-        const types = ["choice", "blank", "short", "calc"];
-        types.forEach(type => {
-          const count = document.getElementById(`${type}Count`).value;
-          const score = document.getElementById(`${type}Score`).value;
-          formData.append(`${type}_count`, count);
-          formData.append(`${type}_score`, score);
-        });
+										if (event.type === 'error') {
+											throw new Error(event.error || '未知流错误');
+										}
 
-        try {
-          const response = await fetch('/api/process', {
-            method: 'POST',
-            body: formData
-          });
+										if (event.type === 'start') {
+											const cardId = `question-card-${questionCounter}`;
+											const cardWrapper = document.createElement("div");
+											cardWrapper.innerHTML = `
+												<div id="${cardId}" class="card mb-3 shadow-sm">
+													<div class="card-header">
+														<strong>题目 ${questionCounter}</strong>
+													</div>
+													<div class="card-body">
+														<pre style="white-space: pre-wrap; word-wrap: break-word;"></pre>
+													</div>
+												</div>
+											`;
+											currentCard = cardWrapper.firstElementChild;
+											questionsContainer.appendChild(currentCard);
+											currentCardBody = currentCard.querySelector('.card-body pre');
+										} else if (event.type === 'streaming' && currentCardBody) {
+											// 使用 textContent 来防止 HTML 注入
+											currentCardBody.textContent += event.content;
+											questionsContainer.scrollTop = questionsContainer.scrollHeight;
+										} else if (event.type === 'end' && currentCard) {
+											const finalData = event.data;
+											// 使用现有的函数来格式化最终的卡片内容
+											const finalCard = createQuestionCard(finalData, questionCounter);
+											// 替换掉临时的流式卡片
+											currentCard.replaceWith(finalCard);
+											// 触发新卡的进入动画
+											setTimeout(() => {
+												finalCard.style.opacity = "1";
+												finalCard.style.transform = "translateY(0)";
+											}, 50);
 
-          if (!response.ok) {
-            const err_msg = await response.json();
-            throw new Error(err_msg.error || "后端接口错误");
-          }
+											questionCounter++;
+											currentCard = null; // 为下一张卡片重置
+											currentCardBody = null;
+										}
+									} catch (e) {
+										console.error("解析或处理流数据时出错:", e);
+										// 可以在这里向用户显示一个通用错误
+									}
+								}
+							}
+						}
+						// Handle any final text in buffer if necessary
+						if (buffer.trim()) {
+							console.log("Finished with non-empty buffer:", buffer);
+						}
 
-          preview.innerText = '';
+					} catch (error) {
+						questionsContainer.innerHTML = `<div class="alert alert-danger" role="alert"><strong>出错了:</strong> ${error.message}</div>`;
+					} finally {
+						generateBtn.disabled = false;
+						spinner.classList.add("d-none");
+					}
+				});
 
-          const reader = response.body.getReader();
-          const decoder = new TextDecoder('utf-8');
+			function createQuestionCard(question, number) {
+				const card = document.createElement("div");
+				card.className = "card mb-3 shadow-sm";
+				card.style.opacity = "0";
+                card.style.transform = "translateY(20px)";
+                card.style.transition = "opacity 0.5s ease, transform 0.5s ease";
 
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) {
-              break;
-            }
-            const chunk = decoder.decode(value, { stream: true });
-            preview.innerText += chunk;
-          }
+				let optionsHtml = "";
+				if (
+					question.question_type === "multiple_choice" &&
+					question.options
+				) {
+					optionsHtml = '<ul class="list-group list-group-flush">';
+					for (const [key, value] of Object.entries(question.options)) {
+						optionsHtml += `<li class="list-group-item">${key}. ${value}</li>`;
+					}
+					optionsHtml += "</ul>";
+				}
 
-          downloadBtn.disabled = false;
+				let answerHtml = "";
+				if (Array.isArray(question.answer)) {
+					answerHtml = question.answer.join(", ");
+				} else {
+					answerHtml = question.answer;
+				}
 
-        } catch (err) {
-          preview.innerText = '发生错误：' + err.message;
-        } finally {
-          submitBtn.disabled = false;
-        }
-      };
+				const typeMap = {
+					multiple_choice: "选择题",
+					fill_in_the_blank: "填空题",
+					short_answer: "简答题",
+				};
+				const questionTypeName =
+					typeMap[question.question_type] || "未知题型";
 
-      document.getElementById('downloadBtn').onclick = () => {
-        const blob = new Blob([document.getElementById('preview').innerText], { type: 'text/plain;charset=utf-8' });
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = '试卷预览.txt';
-        a.click();
-      };
-    });
-  </script>
-</body>
+				card.innerHTML = `
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <strong>${number}. ${questionTypeName}</strong>
+                        <span class="badge bg-secondary">${question.score}分</span>
+                    </div>
+                    <div class="card-body">
+                        <p class="card-text">${question.stem.replace(
+													/___/g,
+													'<u style="padding: 0 1em;">&nbsp;&nbsp;&nbsp;</u>'
+												)}</p>
+                        ${optionsHtml}
+                    </div>
+                    <div class="card-footer text-muted">
+                        <strong>答案:</strong> ${answerHtml}
+                    </div>
+                `;
+				
+                setTimeout(() => {
+                    card.style.opacity = "1";
+                    card.style.transform = "translateY(0)";
+                }, 10);
+
+				return card;
+			}
+		</script>
+	</body>
 </html>
+

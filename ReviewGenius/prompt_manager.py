@@ -1,26 +1,26 @@
 import os
-from typing import Dict, Any
+from jinja2 import Template
 
-PROMPTS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "prompts")
-
-
-def get_prompt(prompt_name: str, **kwargs: Any) -> str:
+def get_prompt(prompt_name: str, **kwargs) -> str:
     """
-    从 .txt 文件加载提示词模板并格式化。
+    从prompts文件夹中读取一个prompt模板文件，并用传入的参数渲染它。
 
-    :param prompt_name: 提示词的名称 (不带 .txt 扩展名)。
-    :param kwargs: 用于替换提示词中占位符的变量。
-    :return: 格式化后的提示词字符串。
+    :param prompt_name: prompt文件的名称（不含扩展名）。
+    :param kwargs: 用于渲染模板的键值对。
+    :return: 渲染后的prompt字符串。
     """
-    file_path = os.path.join(PROMPTS_DIR, f"{prompt_name}.txt")
+    # 构建prompts文件夹的路径
+    prompts_dir = os.path.join(os.path.dirname(__file__), "prompts")
+    prompt_file_path = os.path.join(prompts_dir, f"{prompt_name}.txt")
 
-    if not os.path.exists(file_path):
-        raise FileNotFoundError(f"提示词模板文件未找到: {file_path}")
+    if not os.path.exists(prompt_file_path):
+        raise FileNotFoundError(f"Prompt a '{prompt_name}' not found at '{prompt_file_path}'")
 
-    with open(file_path, "r", encoding="utf-8") as f:
-        prompt_template = f.read()
-
-    return prompt_template.format(**kwargs)
+    with open(prompt_file_path, "r", encoding="utf-8") as f:
+        prompt_template_str = f.read()
+    
+    template = Template(prompt_template_str)
+    return template.render(**kwargs)
 
 
 if __name__ == "__main__":
