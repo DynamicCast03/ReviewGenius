@@ -143,16 +143,29 @@ def grade_submission():
         data = request.get_json()
         questions = data.get("questions")
         user_answers = data.get("answers")
+        api_key = data.get("api_key")
 
-        if not questions or not user_answers:
-            return jsonify({"error": "缺少题目或答案数据"}), 400
+        if not all([questions, user_answers, api_key]):
+            return jsonify({"error": "缺少题目、答案或API Key"}), 400
 
-        grading_results = grading.grade_exam(questions, user_answers)
+        def generate_grade_stream():
+            try:
+                grading_stream = grading.grade_exam_stream(
+                    questions, user_answers, api_key
+                )
+                for event in grading_stream:
+                    yield event
+            except Exception as e:
+                error_event = {
+                    "type": "error",
+                    "error": f"启动批改流失败: {str(e)}",
+                }
+                yield json.dumps(error_event) + "\\n"
 
-        return jsonify(grading_results)
+        return Response(generate_grade_stream(), mimetype="application/x-ndjson")
 
     except Exception as e:
-        error_msg = f"评分时出错: {str(e)}"
+        error_msg = f"评分接口出错: {str(e)}"
         print(error_msg)
         return jsonify({"error": error_msg}), 500
 

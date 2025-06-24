@@ -360,8 +360,11 @@
 
 				const submitBtn = document.getElementById('submit-practice-btn');
 				submitBtn.disabled = true;
-				submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> 正在批改...';
+				submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> 正在初始化批改...';
+				
+				document.querySelectorAll('.practice-card input, .practice-card textarea').forEach(el => el.disabled = true);
 
+				const apiKey = localStorage.getItem('siliconflow_api_key');
 
 				try {
 					const response = await fetch('/api/grade', {
@@ -369,66 +372,107 @@
 						headers: { 'Content-Type': 'application/json' },
 						body: JSON.stringify({
 							questions: generatedQuestions,
-							answers: userAnswers
+							answers: userAnswers,
+							api_key: apiKey
 						})
 					});
 					
 					if (!response.ok) {
 						const errData = await response.json();
-						throw new Error(errData.error || '批改失败');
+						throw new Error(errData.error || '批改服务连接失败');
+					}
+					
+					submitBtn.style.display = 'none';
+
+					const reader = response.body.getReader();
+					const decoder = new TextDecoder();
+					let buffer = "";
+					let gradedCount = 0;
+
+					while (true) {
+						const { done, value } = await reader.read();
+						if (done) break;
+
+						buffer += decoder.decode(value, { stream: true });
+						const lines = buffer.split("\\n");
+						buffer = lines.pop();
+
+						for (const line of lines) {
+							if (line.trim()) {
+								try {
+									const event = JSON.parse(line);
+									const card = document.querySelector(`.practice-card[data-question-index="${event.question_index}"]`);
+									if (!card) continue;
+									
+									const resultArea = card.querySelector('.result-area');
+
+									if (event.type === 'error') {
+										resultArea.innerHTML = `<div class="alert alert-danger p-2"><strong>错误:</strong> ${event.error}</div>`;
+										resultArea.style.display = 'block';
+										gradedCount++;
+									} else if (event.type === 'start') {
+										resultArea.innerHTML = '<pre style="white-space: pre-wrap; word-wrap: break-word; color: #6c757d;"></pre>';
+										resultArea.style.display = 'block';
+									} else if (event.type === 'streaming') {
+										const pre = resultArea.querySelector('pre');
+										if (pre) pre.textContent += event.content;
+									} else if (event.type === 'end') {
+										displaySingleGradingResult(resultArea, event.data, generatedQuestions[event.question_index]);
+										gradedCount++;
+									}
+								} catch (e) {
+									console.error("解析或处理批改流时出错:", e);
+								}
+							}
+						}
+					}
+					
+					if (gradedCount === generatedQuestions.length) {
+						displayOverallScore();
 					}
 
-					const results = await response.json();
-					displayGradingResults(results);
-
 				} catch(error) {
-					alert(`批改时出错: ${error.message}`);
+					alert(`提交批改时出错: ${error.message}`);
+					submitBtn.style.display = 'block';
 					submitBtn.disabled = false;
 					submitBtn.textContent = '提交批改';
+					document.querySelectorAll('.practice-card input, .practice-card textarea').forEach(el => el.disabled = false);
 				}
 			}
 
+			function displaySingleGradingResult(resultArea, resultData, questionData) {
+				const scoreColor = resultData.score === questionData.score ? 'text-success' : (resultData.score > 0 ? 'text-warning' : 'text-danger');
+				let resultHtml = `
+					<h5>批改结果</h5>
+					<p><strong>得分: <span class="${scoreColor}">${resultData.score}</span> / ${questionData.score}</strong></p>
+				`;
 
-			function displayGradingResults(results) {
-				const practiceCards = document.querySelectorAll('.practice-card');
+				if (questionData.question_type === 'multiple_choice') {
+					resultHtml += `<p><strong>正确答案:</strong> ${questionData.answer}</p>`;
+				} else {
+					resultHtml += `<p><strong>参考答案:</strong> ${Array.isArray(questionData.answer) ? questionData.answer.join(', ') : questionData.answer}</p>`;
+				}
+
+				resultHtml += `<p><strong>AI点评:</strong> ${resultData.feedback}</p>`;
+				resultArea.innerHTML = resultHtml;
+			}
+			
+			function displayOverallScore() {
 				let totalScore = 0;
 				let earnedScore = 0;
 
-				results.forEach((result, index) => {
-					const card = practiceCards[index];
+				document.querySelectorAll('.practice-card').forEach((card, index) => {
 					const question = generatedQuestions[index];
 					totalScore += question.score;
-					earnedScore += result.score;
-
-					const resultArea = card.querySelector('.result-area');
-					const scoreColor = result.score === question.score ? 'text-success' : (result.score > 0 ? 'text-warning' : 'text-danger');
-
-					let resultHtml = `
-						<h5>批改结果</h5>
-						<p><strong>得分：<span class="${scoreColor}">${result.score}</span> / ${question.score}</strong></p>
-					`;
-
-					if (question.question_type === 'multiple_choice') {
-						resultHtml += `<p><strong>正确答案：</strong>${question.answer}</p>`;
-					} else {
-						resultHtml += `<p><strong>参考答案：</strong>${Array.isArray(question.answer) ? question.answer.join(', ') : question.answer}</p>`;
+					const scoreSpan = card.querySelector('.result-area span[class*="text-"]');
+					if (scoreSpan) {
+						earnedScore += parseInt(scoreSpan.textContent, 10) || 0;
 					}
-
-					resultHtml += `<p><strong>AI点评：</strong>${result.feedback}</p>`;
-
-					resultArea.innerHTML = resultHtml;
-					resultArea.style.display = 'block';
-
-					// 禁用输入
-					card.querySelectorAll('input, textarea').forEach(el => el.disabled = true);
 				});
-
-				const submitBtn = document.getElementById('submit-practice-btn');
-				submitBtn.remove();
 
 				const overallResult = document.createElement('div');
 				overallResult.className = 'alert alert-info mt-4';
-				overallResult.innerHTML = `<h4>练习完成！</h4><p class="mb-0"><strong>总得分：${earnedScore} / ${totalScore}</strong></p>`;
+				overallResult.innerHTML = `<h4>练习完成！</h4><p class="mb-0"><strong>总得分: ${earnedScore} / ${totalScore}</strong></p>`;
 				document.getElementById('questions-container').appendChild(overallResult);
 			}
 
@@ -568,4 +612,5 @@
 		</script>
 	</body>
 </html>
+
 
