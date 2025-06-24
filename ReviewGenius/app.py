@@ -209,7 +209,7 @@ def generate_exam():
                 if file_ext == ".pdf":
                     with pdfplumber.open(file_path) as pdf:
                         all_text = [page.extract_text() for page in pdf.pages if page.extract_text()]
-                        content = "\\n".join(all_text)
+                        content = "\n".join(all_text)
                 elif file_ext in [".pptx", ".ppt"]:
                     pres = pptx.Presentation(file_path)
                     all_text = []
@@ -217,7 +217,7 @@ def generate_exam():
                         for shape in slide.shapes:
                             if hasattr(shape, "text"):
                                 all_text.append(shape.text)
-                    content = "\\n".join(all_text)
+                    content = "\n".join(all_text)
                 else: # 默认为txt
                     with open(file_path, 'r', encoding='utf-8') as f:
                         content = f.read()
@@ -225,7 +225,7 @@ def generate_exam():
                  return jsonify({"error": f"读取文件 '{filename}' 时出错: {str(e)}"}), 500
 
             document_contents.append(f"--- 来自文件: {filename} ---\n{content}")
-        document_content = "\\n\\n".join(document_contents)
+        document_content = "\n\n".join(document_contents)
 
         scores_data = {
             "multiple_choice": question_settings["选择题"]["score"],
@@ -266,7 +266,7 @@ def generate_exam():
                 if enhanced_mode:
                     event_stream = stream_json_with_events(llm_stream)
                     for event in event_stream:
-                        yield json.dumps(event) + "\\n"
+                        yield json.dumps(event) + "\n"
                     return
 
                 # 原有逻辑，处理非增强模式下的流
@@ -284,22 +284,131 @@ def generate_exam():
                             print(f"Skipping invalid question object: {e}, data: {event['data']}")
                             continue # 不发送这个 'end' 事件
                     
-                    yield json.dumps(event) + "\\n"
+                    yield json.dumps(event) + "\n"
 
             except AuthenticationError:
-                yield json.dumps({"type": "error", "error": "API Key 无效或已过期，请检查您的输入。", "error_type": "authentication"}) + "\\n"
+                yield json.dumps({"type": "error", "error": "API Key 无效或已过期，请检查您的输入。", "error_type": "authentication"}) + "\n"
             except ValueError as e:
                 # 捕获由内容安全检查抛出的ValueError
                 if "输入内容被判定为不安全" in str(e):
-                    yield json.dumps({"type": "error", "error": str(e), "error_type": "security"}) + "\\n"
+                    yield json.dumps({"type": "error", "error": str(e), "error_type": "security"}) + "\n"
                 else:
                     # 重新抛出其他类型的ValueError
-                    yield json.dumps({"type": "error", "error": f"生成过程中发生验证错误: {str(e)}", "error_type": "generation"}) + "\\n"
+                    yield json.dumps({"type": "error", "error": f"生成过程中发生验证错误: {str(e)}", "error_type": "generation"}) + "\n"
             except Exception as e:
                 # 捕获其他流式过程中的错误
-                yield json.dumps({"type": "error", "error": f"生成过程中发生错误: {str(e)}", "error_type": "generation"}) + "\\n"
+                yield json.dumps({"type": "error", "error": f"生成过程中发生错误: {str(e)}", "error_type": "generation"}) + "\n"
 
         return Response(generate_question_stream(), mimetype="application/x-ndjson")
+
+    except Exception as e:
+        error_msg = f"处理时出错: {str(e)}"
+        print(error_msg)
+        return jsonify({"error": error_msg}), 500
+
+@app.route("/api/regenerate_question", methods=["POST"])
+def regenerate_question():
+    try:
+        data = request.get_json()
+        original_question = data.get("question")
+        action = data.get("action") # "regenerate", "increase_difficulty", "decrease_difficulty"
+        user_requirement = data.get("user_requirement", "无特定要求")
+        api_key = data.get("api_key")
+        
+        if not all([original_question, action, api_key]):
+            return jsonify({"error": "缺少原始题目、操作类型或API Key"}), 400
+
+        # 与主流程类似，读取所有上传文件作为上下文
+        uploaded_filenames = get_uploaded_files()
+        if not uploaded_filenames:
+            return jsonify({"error": "找不到参考资料文件"}), 400
+
+        document_contents = []
+        for filename in uploaded_filenames:
+            file_path = os.path.join(UPLOAD_FOLDER, filename)
+            file_ext = os.path.splitext(filename)[1].lower()
+            content = ""
+            try:
+                if file_ext == ".pdf":
+                    with pdfplumber.open(file_path) as pdf:
+                        all_text = [page.extract_text() for page in pdf.pages if page.extract_text()]
+                        content = "\n".join(all_text)
+                elif file_ext in [".pptx", ".ppt"]:
+                    pres = pptx.Presentation(file_path)
+                    all_text = [s.text for slide in pres.slides for shape in slide.shapes if hasattr(shape, "text")]
+                    content = "\n".join(all_text)
+                else: # 默认为txt
+                    with open(file_path, 'r', encoding='utf-8') as f:
+                        content = f.read()
+            except Exception as e:
+                 return jsonify({"error": f"读取文件 '{filename}' 时出错: {str(e)}"}), 500
+            document_contents.append(f"--- 来自文件: {filename} ---\n{content}")
+        
+        document_content = "\n\n".join(document_contents)
+
+        # 确定使用哪个提示
+        prompt_map = {
+            "regenerate": "regenerate_question_prompt",
+            "increase_difficulty": "increase_difficulty_prompt",
+            "decrease_difficulty": "decrease_difficulty_prompt",
+        }
+        prompt_name = prompt_map.get(action)
+        if not prompt_name:
+            return jsonify({"error": "无效的操作类型"}), 400
+
+        # 准备提示词参数
+        config = load_config()
+        temperature = config.get("temperature", 1.0)
+        formatting_instructions = prompt_manager.get_prompt("exam_generation_prompt_formatting")
+
+        main_prompt = prompt_manager.get_prompt(
+            prompt_name,
+            document_content=document_content,
+            user_requirement=user_requirement,
+            original_question=json.dumps(original_question, ensure_ascii=False, indent=2),
+            score=original_question.get('score', 5), # 使用原题的分数
+            formatting_instructions=formatting_instructions
+        )
+
+        messages = [{"role": "user", "content": main_prompt}]
+
+        def generate_stream():
+            try:
+                # 完全复用 siliconflow_client 和 stream_json_with_events 的逻辑
+                enhanced_mode = config.get("enhanced_structured_output", False)
+                llm_stream = siliconflow_client.invoke_llm(
+                    api_key=api_key,
+                    model="Qwen/Qwen2.5-72B-Instruct",
+                    messages=messages,
+                    stream=not enhanced_mode,
+                    temperature=temperature,
+                    enhanced_structured_output=enhanced_mode,
+                    formatting_prompt=formatting_instructions if enhanced_mode else None
+                )
+
+                # 使用事件流解析器
+                event_stream = stream_json_with_events(llm_stream)
+                for event in event_stream:
+                    if event["type"] == "end":
+                        # 同样可以加入Question类的验证
+                        try:
+                            question_obj = Question.from_dict(event["data"])
+                            # 这里需要确保新生成题目的分数和原题一致
+                            question_obj.score = original_question.get('score', 5)
+                            event["data"] = question_obj.to_dict()
+                        except (ValueError, KeyError) as e:
+                            print(f"Skipping invalid regenerated question object: {e}, data: {event['data']}")
+                            continue
+                    yield json.dumps(event) + "\n"
+
+            except AuthenticationError:
+                yield json.dumps({"type": "error", "error": "API Key 无效或已过期。", "error_type": "authentication"}) + "\n"
+            except ValueError as e:
+                 yield json.dumps({"type": "error", "error": str(e), "error_type": "security"}) + "\n"
+            except Exception as e:
+                yield json.dumps({"type": "error", "error": f"生成过程中发生错误: {str(e)}", "error_type": "generation"}) + "\n"
+
+        return Response(generate_stream(), mimetype="application/x-ndjson")
 
     except Exception as e:
         error_msg = f"处理时出错: {str(e)}"
@@ -353,7 +462,7 @@ def grade_submission():
                     "type": "error",
                     "error": f"启动批改流失败: {str(e)}",
                 }
-                yield json.dumps(error_event) + "\\n"
+                yield json.dumps(error_event) + "\n"
 
         return Response(generate_grade_stream(), mimetype="application/x-ndjson")
 

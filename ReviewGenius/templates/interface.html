@@ -531,7 +531,27 @@
 								</div>
 							</div>
 						</div>
+						<div class="card-footer d-flex justify-content-end gap-2 bg-white">
+							<button class="btn btn-outline-secondary btn-sm regenerate-btn" data-action="regenerate">
+								<i class="bi bi-arrow-repeat"></i> 重新出题
+							</button>
+							<button class="btn btn-outline-secondary btn-sm regenerate-btn" data-action="increase_difficulty">
+								<i class="bi bi-graph-up-arrow"></i> 增加难度
+							</button>
+							<button class="btn btn-outline-secondary btn-sm regenerate-btn" data-action="decrease_difficulty">
+								<i class="bi bi-graph-down-arrow"></i> 降低难度
+							</button>
+						</div>
 					`;
+					
+					card.dataset.questionIndex = question_number - 1;
+
+					// 动态绑定重新生成按钮的事件
+					card.querySelectorAll('.regenerate-btn').forEach(button => {
+						button.addEventListener('click', (e) => {
+							handleRegenerateClick(e.currentTarget, e.currentTarget.dataset.action);
+						});
+					});
 
 					const toggleButton = card.querySelector('.toggle-answer');
 					toggleButton.addEventListener('click', function() {
@@ -657,7 +677,7 @@
 							if (done) break;
 
 							buffer += decoder.decode(value, { stream: true });
-							const lines = buffer.split("\\n");
+							const lines = buffer.split("\n");
 							buffer = lines.pop();
 
 							for (const line of lines) {
@@ -880,7 +900,7 @@
 								if (done) break;
 
 								buffer += decoder.decode(value, { stream: true });
-								const lines = buffer.split("\\n");
+								const lines = buffer.split("\n");
 								buffer = lines.pop();
 
 								for (const line of lines) {
@@ -952,6 +972,110 @@
 					toastContainer.appendChild(toastEl);
 					const toast = new bootstrap.Toast(toastEl, { delay: 5000 });
 					toast.show();
+				}
+
+				async function handleRegenerateClick(button, action) {
+					const card = button.closest('.card');
+					const questionIndex = parseInt(card.dataset.questionIndex, 10);
+					const originalQuestion = currentQuestions[questionIndex];
+					
+					const apiKey = localStorage.getItem('siliconflow_api_key');
+					if (!apiKey) {
+						alert('请输入API Key');
+						return;
+					}
+
+					const userRequirement = document.getElementById('user_input').value || '无特定要求';
+					
+					// 找到要被替换的原始卡片
+					const originalCard = document.querySelector(`.card[data-question-index='${questionIndex}']`);
+					if (!originalCard) return;
+
+
+					// 1. 直接创建骨架卡片
+					const skeletonCard = document.createElement('div');
+					skeletonCard.className = 'card mb-3 shadow-sm';
+					skeletonCard.dataset.questionIndex = questionIndex;
+					skeletonCard.innerHTML = `
+						<div class="card-header">
+							<strong>题目 ${questionIndex + 1} (正在重新生成...)</strong>
+						</div>
+						<div class="card-body">
+							<pre style="white-space: pre-wrap; word-wrap: break-word; color: #6c757d;"></pre>
+						</div>
+					`;
+
+					// 2. 立即替换原始卡片
+					originalCard.replaceWith(skeletonCard);
+					const preElement = skeletonCard.querySelector('pre');
+
+					try {
+						// 3. 开始请求
+						const response = await fetch('/api/regenerate_question', {
+							method: 'POST',
+							headers: { 'Content-Type': 'application/json' },
+							body: JSON.stringify({
+								question: originalQuestion,
+								action: action,
+								user_requirement: userRequirement,
+								api_key: apiKey
+							})
+						});
+
+						if (!response.ok) {
+							const errorData = await response.json();
+							throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+						}
+						
+						const reader = response.body.getReader();
+						const decoder = new TextDecoder();
+						let buffer = "";
+						
+						// 清空 pre 标签的初始内容
+						if(preElement) preElement.textContent = '';
+
+						while (true) {
+							const { done, value } = await reader.read();
+							if (done) break;
+
+							buffer += decoder.decode(value, { stream: true });
+							const lines = buffer.split("\n");
+							buffer = lines.pop();
+
+							for (const line of lines) {
+								if (line.trim()) {
+									// JSON.parse可能会抛出异常，如果流数据不完整
+									try {
+										const event = JSON.parse(line);
+										if (event.type === 'error') throw new Error(event.error || '流处理错误');
+										
+										if (event.type === 'streaming' && preElement) {
+											preElement.textContent += event.content;
+										} else if (event.type === 'end') {
+											const newQuestionData = event.data;
+											const newCard = createQuestionCard(newQuestionData, questionIndex + 1);
+											
+											// 最终替换骨架卡片
+											const cardToReplace = document.querySelector(`.card[data-question-index='${questionIndex}']`);
+											if(cardToReplace) cardToReplace.replaceWith(newCard);
+											
+											// 更新全局题目列表
+											currentQuestions[questionIndex] = newQuestionData;
+										}
+									} catch(e) {
+										// 忽略JSON解析错误，等待更多数据
+										console.warn("JSON parsing error in stream, waiting for more data...", line);
+									}
+								}
+							}
+						}
+					} catch (error) {
+						alert(`操作失败: ${error.message}`);
+						// 出错时，恢复为原始卡片
+						const finalCard = createQuestionCard(originalQuestion, questionIndex + 1);
+						const cardToReplace = document.querySelector(`.card[data-question-index='${questionIndex}']`);
+						if(cardToReplace) cardToReplace.replaceWith(finalCard);
+					}
 				}
 			});
 		</script>
