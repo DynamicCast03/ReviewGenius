@@ -473,35 +473,6 @@
 					return card;
 				}
 
-				function startPractice() {
-					const formContainer = document.querySelector(".col-md-4");
-					const questionsContainer = document.getElementById("questions-container");
-					const controlsContainer = document.getElementById("controls-container");
-
-					formContainer.style.display = "none"; // 隐藏表单
-					questionsContainer.innerHTML = ""; // 清空题目预览
-					controlsContainer.innerHTML = ""; // 清空"开始练习"按钮
-
-					document.querySelector(".col-md-8").classList.replace("col-md-8", "col-md-12"); // 扩展宽度
-
-					const practiceTitle = document.createElement("h4");
-					practiceTitle.textContent = "在线练习";
-					questionsContainer.appendChild(practiceTitle);
-
-
-					currentQuestions.forEach((q, index) => {
-						const card = createPracticeCard(q, index + 1);
-						questionsContainer.appendChild(card);
-					});
-
-					const submitBtn = document.createElement('button');
-					submitBtn.id = 'submit-practice-btn';
-					submitBtn.className = 'btn btn-success btn-lg mt-4';
-					submitBtn.textContent = '提交批改';
-					submitBtn.addEventListener('click', submitForGrading);
-					questionsContainer.appendChild(submitBtn);
-				}
-
 				function createPracticeCard(data, question_number) {
 					const card = document.createElement('div');
 					card.className = 'card mb-3 shadow-sm practice-card';
@@ -695,6 +666,86 @@
 					document.getElementById('questions-container').appendChild(overallResult);
 				}
 
+				function addReviewControls() {
+					const controlsContainer = document.getElementById("controls-container");
+					controlsContainer.innerHTML = ''; // 清空现有控件
+					const startBtn = document.createElement('button');
+					startBtn.id = 'start-practice-btn';
+					startBtn.className = 'btn btn-primary btn-lg';
+					startBtn.textContent = '开始在线练习';
+					startBtn.addEventListener('click', showPracticePage);
+					controlsContainer.appendChild(startBtn);
+				}
+
+				function showReviewPage() {
+					const formContainer = document.querySelector(".col-md-4");
+					// 在从练习页面返回时，它将是 col-md-12
+					const questionsCol = document.querySelector(".col-md-12"); 
+					const questionsContainer = document.getElementById("questions-container");
+					const controlsContainer = document.getElementById("controls-container");
+
+					formContainer.style.display = "block";
+					if (questionsCol) {
+						questionsCol.classList.replace("col-md-12", "col-md-8");
+					}
+					
+					questionsContainer.innerHTML = "";
+					controlsContainer.innerHTML = "";
+
+					const title = document.createElement("h4");
+					title.textContent = "生成的题目";
+					questionsContainer.appendChild(title);
+
+					currentQuestions.forEach((q, index) => {
+						const card = createQuestionCard(q, index + 1);
+						questionsContainer.appendChild(card);
+					});
+
+					addReviewControls(); // 添加"开始练习"按钮
+				}
+
+				function showPracticePage() {
+					const formContainer = document.querySelector(".col-md-4");
+					const questionsCol = document.querySelector(".col-md-8");
+					const questionsContainer = document.getElementById("questions-container");
+					const controlsContainer = document.getElementById("controls-container");
+
+					formContainer.style.display = "none"; // 隐藏表单
+					questionsContainer.innerHTML = ""; // 清空题目预览
+					controlsContainer.innerHTML = ""; // 清空"开始练习"按钮
+
+					questionsCol.classList.replace("col-md-8", "col-md-12"); // 扩展宽度
+
+					const practiceTitle = document.createElement("h4");
+					practiceTitle.textContent = "在线练习";
+					questionsContainer.appendChild(practiceTitle);
+
+
+					currentQuestions.forEach((q, index) => {
+						const card = createPracticeCard(q, index + 1);
+						questionsContainer.appendChild(card);
+					});
+
+					const buttonGroup = document.createElement('div');
+					buttonGroup.className = 'mt-4 text-center';
+
+					const submitBtn = document.createElement('button');
+					submitBtn.id = 'submit-practice-btn';
+					submitBtn.className = 'btn btn-success btn-lg me-2';
+					submitBtn.textContent = '提交批改';
+					submitBtn.addEventListener('click', submitForGrading);
+					buttonGroup.appendChild(submitBtn);
+
+					const backBtn = document.createElement('button');
+					backBtn.id = 'back-to-review-btn';
+					backBtn.className = 'btn btn-secondary btn-lg';
+					backBtn.textContent = '返回预览';
+					backBtn.addEventListener('click', showReviewPage);
+					buttonGroup.appendChild(backBtn);
+
+					questionsContainer.appendChild(buttonGroup);
+				}
+
 				document
 					.getElementById("generate-form")
 					.addEventListener("submit", async function (event) {
@@ -702,19 +753,17 @@
 
 						const generateBtn = document.getElementById("generate-btn");
 						const spinner = generateBtn.querySelector(".spinner-border");
-						const questionsContainer =
-							document.getElementById("questions-container");
-						const placeholder = document.getElementById(
-							"start-generation-placeholder"
-						);
+						const questionsContainer = document.getElementById("questions-container");
+						const placeholder = document.getElementById("start-generation-placeholder");
+						const controlsContainer = document.getElementById("controls-container");
 
 						generateBtn.disabled = true;
 						spinner.classList.remove("d-none");
 						if (placeholder) {
 							placeholder.remove();
 						}
-						questionsContainer.innerHTML =
-							'<p class="text-center text-primary">正在连接模型，请稍候...</p>';
+						questionsContainer.innerHTML = '<p class="text-center text-primary">正在连接模型，请稍候...</p>';
+						controlsContainer.innerHTML = '';
 
 						const formData = new FormData(this);
 
@@ -726,9 +775,7 @@
 
 							if (!response.ok) {
 								const errorData = await response.json();
-								throw new Error(
-									errorData.error || `HTTP error! status: ${response.status}`
-								);
+								throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
 							}
 
 							questionsContainer.innerHTML = ""; // 清空等待提示
@@ -740,109 +787,85 @@
 							let questionCounter = 1;
 							let currentCard = null;
 							let currentCardBody = null;
-							let streamEnded = false;
 
 							while (true) {
 								const { done, value } = await reader.read();
-								if (done) {
-									break;
-								}
+								if (done) break;
 
 								buffer += decoder.decode(value, { stream: true });
-								// \\n is used as a separator by the backend
 								const lines = buffer.split("\\n");
-
-								buffer = lines.pop(); // 保留可能不完整的行
+								buffer = lines.pop();
 
 								for (const line of lines) {
 									if (line.trim()) {
-										try {
-											const event = JSON.parse(line);
-
-											if (event.type === 'error') {
-												console.error("Server Error:", event.error);
-												// 根据错误类型显示不同提示
-												if (event.error_type === "authentication") {
-													alert("API Key 验证失败，请检查您的 Key 是否正确或已过期。");
-												} else if (event.error_type === "security") {
-													alert("内容安全检查未通过，您的请求已被拒绝。请检查您上传的文档或输入的要求中是否包含不当内容。");
-												} else {
-													alert(`生成试卷时发生错误: ${event.error}`);
-												}
-												// 发生任何错误都应该重置按钮状态
-												resetGenerateButton();
-												streamEnded = true; // 标记流已结束
-												return; // 结束处理
+										const event = JSON.parse(line);
+										if (event.type === 'error') {
+											let errorMessage = event.error || '一个未知的流错误发生了';
+											if (event.error_type === 'security') {
+												errorMessage = `内容安全检查未通过：${event.error}`;
+											} else if (event.error_type === 'authentication') {
+												errorMessage = `API Key 认证失败：${event.error}`;
 											}
-
-											if (streamEnded) return;
-
-											if (event.type === 'start') {
-												const cardId = `question-card-${questionCounter}`;
-												const cardWrapper = document.createElement("div");
-												cardWrapper.innerHTML = `
-													<div id="${cardId}" class="card mb-3 shadow-sm">
-														<div class="card-header">
-															<strong>题目 ${questionCounter}</strong>
-														</div>
-														<div class="card-body">
-															<pre style="white-space: pre-wrap; word-wrap: break-word;"></pre>
-														</div>
+											throw new Error(errorMessage);
+										}
+										
+										if (event.type === 'start') {
+											const cardId = `question-card-${questionCounter}`;
+											const cardWrapper = document.createElement("div");
+											cardWrapper.innerHTML = `
+												<div id="${cardId}" class="card mb-3 shadow-sm">
+													<div class="card-header">
+														<strong>题目 ${questionCounter}</strong>
 													</div>
-												`;
-												currentCard = cardWrapper.firstElementChild;
-												questionsContainer.appendChild(currentCard);
-												currentCardBody = currentCard.querySelector('.card-body pre');
-											} else if (event.type === 'streaming' && currentCardBody) {
-												// 使用 textContent 来防止 HTML 注入
-												currentCardBody.textContent += event.content;
-												questionsContainer.scrollTop = questionsContainer.scrollHeight;
-											} else if (event.type === 'end' && currentCard) {
-												const finalData = event.data;
-												currentQuestions.push(finalData); // 存储题目数据
-												// 使用现有的函数来格式化最终的卡片内容
-												const finalCard = createQuestionCard(finalData, questionCounter);
-												// 替换掉临时的流式卡片
-												currentCard.replaceWith(finalCard);
-												// 触发新卡的进入动画
-												setTimeout(() => {
-													finalCard.style.opacity = "1";
-													finalCard.style.transform = "translateY(0)";
-												}, 50);
+													<div class="card-body">
+														<pre style="white-space: pre-wrap; word-wrap: break-word;"></pre>
+													</div>
+												</div>
+											`;
+											currentCard = cardWrapper.firstElementChild;
+											questionsContainer.appendChild(currentCard);
+											currentCardBody = currentCard.querySelector('.card-body pre');
 
-												questionCounter++;
-												currentCard = null; // 为下一张卡片重置
-												currentCardBody = null;
-											}
-										} catch (e) {
-											console.error("解析或处理流数据时出错:", e);
-											// 可以在这里向用户显示一个通用错误
+										} else if (event.type === 'streaming' && currentCardBody) {
+											currentCardBody.textContent += event.content;
+											questionsContainer.scrollTop = questionsContainer.scrollHeight;
+
+										} else if (event.type === 'end' && currentCard) {
+											const finalData = event.data;
+											currentQuestions.push(finalData); 
+											const finalCard = createQuestionCard(finalData, questionCounter);
+											currentCard.replaceWith(finalCard);
+											
+											questionCounter++;
+											currentCard = null; 
+											currentCardBody = null;
 										}
 									}
 								}
 							}
-							// Handle any final text in buffer if necessary
-							if (buffer.trim()) {
-								console.log("Finished with non-empty buffer:", buffer);
+							
+							if (currentQuestions.length > 0) {
+								addReviewControls();
 							}
 
-							// 全部题目加载完成后显示"开始练习"按钮
-							const controlsContainer = document.getElementById("controls-container");
-							const practiceBtn = document.createElement("button");
-							practiceBtn.id = "start-practice-btn";
-							practiceBtn.className = "btn btn-info btn-lg";
-							practiceBtn.textContent = "开始练习";
-							practiceBtn.onclick = startPractice;
-							controlsContainer.innerHTML = "";
-							controlsContainer.appendChild(practiceBtn);
-
 						} catch (error) {
+							alert(`出题失败: ${error.message}`);
 							questionsContainer.innerHTML = `<div class="alert alert-danger" role="alert"><strong>出错了:</strong> ${error.message}</div>`;
 						} finally {
 							generateBtn.disabled = false;
 							spinner.classList.add("d-none");
 						}
 					});
+
+				function showAlert(message, type = 'info') {
+					const toastContainer = document.getElementById('toast-container');
+					const toastEl = document.createElement('div');
+					toastEl.className = `alert alert-${type} mt-3`;
+					toastEl.textContent = message;
+					toastContainer.appendChild(toastEl);
+					const toast = new bootstrap.Toast(toastEl, { delay: 5000 });
+					toast.show();
+				}
 			});
 		</script>
 	</body>
