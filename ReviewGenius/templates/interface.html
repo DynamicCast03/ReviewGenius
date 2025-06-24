@@ -174,9 +174,16 @@
 					</div>
 					<div class="modal-body">
 						<div class="mb-3">
-							<label for="temperature-slider" class="form-label">模型 Temperature: <span id="temperature-value">1.0</span></label>
+							<label for="temperature-slider" class="form-label">模型 Temperature: <span id="temperature-value">{{ config.temperature }}</span></label>
 							<p class="form-text text-muted small">较低的值（如 0.2）会使输出更具确定性和一致性。较高的值（如 1.0）会带来更多的多样性和创造性。</p>
-							<input type="range" class="form-range" id="temperature-slider" min="0" max="2" step="0.1" value="1.0">
+							<input type="range" class="form-range" id="temperature-slider" min="0" max="2" step="0.1" value="{{ config.temperature }}">
+						</div>
+						<div class="mb-3">
+							<div class="form-check form-switch">
+								<input class="form-check-input" type="checkbox" role="switch" id="enhanced-structured-output" {% if config.enhanced_structured_output %}checked{% endif %}>
+								<label class="form-check-label" for="enhanced-structured-output">增强结构化输出</label>
+							</div>
+							<p class="form-text text-muted small">开启后，将尝试让模型返回更稳定、更易于解析的结构化数据。 (此功能暂未实现)</p>
 						</div>
 					</div>
 					<div class="modal-footer">
@@ -209,6 +216,7 @@
 				const settingsModalEl = document.getElementById('settingsModal');
 				const settingsModal = new bootstrap.Modal(settingsModalEl);
 
+				const enhancedOutputSwitch = document.getElementById('enhanced-structured-output');
 
 				// Load saved temperature or use default
 				let currentTemperature = localStorage.getItem('llm_temperature') || '0.7';
@@ -224,10 +232,31 @@
 				// Save settings when button is clicked
 				saveSettingsBtn.addEventListener('click', function() {
 					const newTemperature = temperatureSlider.value;
-					localStorage.setItem('llm_temperature', newTemperature);
-					temperatureInput.value = newTemperature;
-					console.log('Temperature saved:', newTemperature);
-					settingsModal.hide();
+					const enhancedOutput = enhancedOutputSwitch.checked;
+					
+					const settings = {
+						temperature: newTemperature,
+						'enhanced_structured_output': enhancedOutput
+					};
+
+					fetch('/api/settings', {
+						method: 'POST',
+						headers: {
+							'Content-Type': 'application/json'
+						},
+						body: JSON.stringify(settings)
+					})
+					.then(response => response.json())
+					.then(data => {
+						console.log('Settings saved:', data);
+						// Update the hidden input for the main form if needed
+						temperatureInput.value = newTemperature;
+						settingsModal.hide();
+					})
+					.catch(error => {
+						console.error('Error saving settings:', error);
+						alert('保存设置失败！');
+					});
 				});
 			});
 

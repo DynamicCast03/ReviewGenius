@@ -1,5 +1,5 @@
 import os
-from openai import OpenAI
+from openai import OpenAI, APIError
 from typing import List, Dict, Generator, Union
 
 def invoke_llm(
@@ -7,7 +7,10 @@ def invoke_llm(
     model: str,
     messages: List[Dict[str, str]],
     stream: bool = False,
-    temperature: float = 0.7,
+    temperature: float = 1.0,
+    max_tokens: int = 4096,
+    enhanced_structured_output: bool = False,
+    formatting_prompt: str = None
 ) -> Union[Generator[str, None, None], str]:
     """
     Invokes the SiliconFlow Large Language Model.
@@ -17,25 +20,70 @@ def invoke_llm(
     :param messages: A list of message dictionaries.
     :param stream: Whether to return the response as a stream.
     :param temperature: The sampling temperature.
+    :param max_tokens: The maximum number of tokens to generate.
+    :param enhanced_structured_output: Whether to enable enhanced structured output.
+    :param formatting_prompt: The formatting prompt for secondary streaming.
     :return: A generator if stream is True, otherwise a string with the full response.
     """
-    client = OpenAI(api_key=api_key, base_url="https://api.siliconflow.cn/v1")
+    if not api_key:
+        raise ValueError("API Key 不能为空")
 
-    if stream:
-        def stream_generator():
-            response = client.chat.completions.create(
-                model=model, messages=messages, stream=True, temperature=temperature
+    client = OpenAI(
+        api_key=api_key,
+        base_url=os.environ.get("SILICONFLOW_API_BASE", "https://api.siliconflow.cn/v1"),
+    )
+
+    # 如果启用了增强结构化输出
+    if enhanced_structured_output and formatting_prompt:
+        # 1. 第一次调用，非流式，获取完整输出
+        try:
+            initial_response = client.chat.completions.create(
+                model=model,
+                messages=messages,
+                stream=False, # 强制非流式
+                temperature=temperature,
+                max_tokens=max_tokens,
             )
-            for chunk in response:
-                if chunk.choices and chunk.choices[0].delta.content:
-                    yield chunk.choices[0].delta.content
+            first_call_output = initial_response.choices[0].message.content
+        except APIError as e:
+            # 如果第一次调用失败，直接抛出异常
+            print(f"增强模式下，第一次调用模型失败: {e}")
+            raise e
 
-        return stream_generator()
-    else:
-        response = client.chat.completions.create(
-            model=model, messages=messages, stream=False, temperature=temperature
+        # 2. 第二次调用，使用格式化提示词，流式返回
+        reformat_messages = [
+            {
+                "role": "user",
+                "content": f"你是一个JSON格式化专家。你的任务是将一段可能不完全符合格式的文本，严格修正为连续的、无缝拼接的JSON对象流。\n\n"
+                           f"**极端重要规则**:\n"
+                           f"1. **绝对禁止**在第一个JSON对象之前或最后一个JSON对象之后，输出任何说明性文字、注释或任何非JSON内容。\n"
+                           f"2. 你的输出流必须**只能**是连续的、无缝拼接的JSON对象。例如: {{\"key\": \"value\"}}{{\"key\": \"value\"}}。\n"
+                           f"3. 每个JSON对象都必须严格遵守JSON语法，**严禁**使用悬挂逗号（trailing commas）。\n\n"
+                           f"**JSON对象结构参考**:\n"
+                           f"每个JSON对象都应该像下面这个例子一样，但字段内容需根据'待格式化内容'来填充:\n"
+                           f"```json\n{formatting_prompt}\n```\n\n"
+                           f"**待格式化内容**:\n---\n{first_call_output}\n---\n\n"
+                           f"请立即开始输出格式化后的JSON流。"
+            }
+        ]
+        
+        # 返回第二次调用的流
+        return client.chat.completions.create(
+            model='Pro/Qwen/Qwen2.5-7B-Instruct',
+            messages=reformat_messages,
+            stream=True, # 强制流式
+            temperature=0.0, # 为了格式化，使用更低的温度
+            max_tokens=max_tokens,
         )
-        return response.choices[0].message.content
+
+    # 原始逻辑：如果未启用增强模式
+    return client.chat.completions.create(
+        model=model,
+        messages=messages,
+        stream=stream,
+        temperature=temperature,
+        max_tokens=max_tokens,
+    )
 
 
 if __name__ == "__main__":

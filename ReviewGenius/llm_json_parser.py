@@ -18,7 +18,21 @@ def stream_json_with_events(text_stream: Generator[str, None, None]) -> Generato
     while True:
         try:
             # Read from the stream until we have something to process
-            chunk = next(text_stream)
+            raw_chunk = next(text_stream)
+
+            # Extract content from the chunk object
+            chunk = None
+            if hasattr(raw_chunk, 'choices') and raw_chunk.choices:
+                delta = raw_chunk.choices[0].delta
+                if hasattr(delta, 'content'):
+                    chunk = delta.content
+            else:
+                # Fallback for old string-based stream
+                chunk = str(raw_chunk)
+            
+            if chunk is None:
+                continue
+
             print(chunk, end="") # Server-side debug print
             buffer += chunk
         except StopIteration:

@@ -1,7 +1,7 @@
 import os
 from jinja2 import Template
 
-def get_prompt(prompt_name: str, **kwargs) -> str:
+def get_prompt(prompt_name: str, is_template=False, **kwargs) -> str:
     """
     从prompts文件夹中读取一个prompt模板文件，并用传入的参数渲染它。
 
@@ -19,8 +19,11 @@ def get_prompt(prompt_name: str, **kwargs) -> str:
     with open(prompt_file_path, "r", encoding="utf-8") as f:
         prompt_template_str = f.read()
     
-    template = Template(prompt_template_str)
-    return template.render(**kwargs)
+        template = Template(prompt_template_str)
+    if is_template:
+        return template
+    else:
+        return template.render(**kwargs)
 
 
 if __name__ == "__main__":

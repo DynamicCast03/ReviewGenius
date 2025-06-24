@@ -19,15 +19,50 @@ import grading # 导入评分模块
 app = Flask(__name__)
 
 UPLOAD_FOLDER = "uploads"
+CONFIG_FILE = "config.json"
 app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024
 app.config["UPLOAD_EXTENSIONS"] = [".txt"]  # 仅支持txt
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
+def load_config():
+    if not os.path.exists(CONFIG_FILE):
+        default_config = {
+            "temperature": 1.0,
+            "enhanced_structured_output": False
+        }
+        with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
+            json.dump(default_config, f, indent=4)
+        return default_config
+    try:
+        with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except (json.JSONDecodeError, FileNotFoundError):
+        return {
+            "temperature": 1.0,
+            "enhanced_structured_output": False
+        }
+
+def save_config(config_data):
+    with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
+        json.dump(config_data, f, indent=4)
 
 @app.route("/")
 def index():
-    return render_template("./interface.html")
+    config = load_config()
+    return render_template("./interface.html", config=config)
 
+@app.route("/api/settings", methods=["GET", "POST"])
+def manage_settings():
+    if request.method == "GET":
+        return jsonify(load_config())
+    
+    if request.method == "POST":
+        data = request.json
+        config = load_config()
+        config["temperature"] = float(data.get("temperature", config["temperature"]))
+        config["enhanced_structured_output"] = bool(data.get("enhanced_structured_output", config["enhanced_structured_output"]))
+        save_config(config)
+        return jsonify({"message": "设置已保存", "config": config})
 
 @app.route("/api/process", methods=["POST"])
 def generate_exam():
@@ -46,7 +81,9 @@ def generate_exam():
         user_text = request.form.get("user_input", "无特定要求")
         user_text = sanitizer.sanitize(user_text)
         api_key = request.form.get("api_key")
-        temperature = float(request.form.get("temperature", "0.7"))
+        
+        config = load_config()
+        temperature = config.get("temperature", 1.0)
 
         if not api_key:
             return jsonify({"error": "API Key缺失"}), 400
@@ -83,32 +120,49 @@ def generate_exam():
 
         document_content = file.read().decode("utf-8")
 
-        prompt = prompt_manager.get_prompt(
-            "exam_generation_prompt",
-            document_content=document_content,
-            user_requirement=user_text,
-            question_types=question_types_str,
-            scores={
-                "multiple_choice": question_settings["选择题"]["score"],
-                "fill_in_the_blank": question_settings["填空题"]["score"],
-                "short_answer": question_settings["简答题"]["score"],
-            },
-        )
+        scores_data = {
+            "multiple_choice": question_settings["选择题"]["score"],
+            "fill_in_the_blank": question_settings["填空题"]["score"],
+            "short_answer": question_settings["简答题"]["score"],
+        }
+
+        # 1. 加载静态的格式化提示词
+        formatting_instructions = prompt_manager.get_prompt("exam_generation_prompt_formatting")
+
+        # 2. 渲染主提示词，注入所有动态内容和静态格式说明
+        main_prompt = prompt_manager.get_prompt("exam_generation_prompt", document_content=document_content,
+        user_requirement=user_text,
+        question_types=question_types_str,
+        formatting_instructions=formatting_instructions,
+        scores=scores_data)
         
-        messages = [{"role": "user", "content": prompt}]
+        messages = [{"role": "user", "content": main_prompt}]
 
         def generate_question_stream():
             try:
+                # 检查是否启用增强模式
+                config = load_config()
+                enhanced_mode = config.get("enhanced_structured_output", False)
+
                 # 使用我们创建的客户端进行流式调用
                 llm_stream = siliconflow_client.invoke_llm(
                     api_key=api_key,
                     model="Qwen/Qwen2.5-72B-Instruct",
                     messages=messages,
-                    stream=True,
+                    stream=not enhanced_mode, # 如果增强模式，第一次调用就不是流式
                     temperature=temperature,
+                    enhanced_structured_output=enhanced_mode,
+                    formatting_prompt=formatting_instructions if enhanced_mode else None
                 )
                 
-                # 使用新的事件生成器
+                # 如果是增强模式，llm_stream已经是第二次调用的流，直接处理
+                if enhanced_mode:
+                    event_stream = stream_json_with_events(llm_stream)
+                    for event in event_stream:
+                        yield json.dumps(event) + "\\n"
+                    return
+
+                # 原有逻辑，处理非增强模式下的流
                 event_stream = stream_json_with_events(llm_stream)
 
                 for event in event_stream:
@@ -146,7 +200,10 @@ def grade_submission():
         questions = data.get("questions")
         user_answers = data.get("answers")
         api_key = data.get("api_key")
-        temperature = data.get("temperature", 0.7)
+        
+        config = load_config()
+        temperature = config.get("temperature", 0.7)
+        enhanced_mode = config.get("enhanced_structured_output", False)
 
         if not all([questions, user_answers, api_key]):
             return jsonify({"error": "缺少题目、答案或API Key"}), 400
@@ -154,7 +211,8 @@ def grade_submission():
         def generate_grade_stream():
             try:
                 grading_stream = grading.grade_exam_stream(
-                    questions, user_answers, api_key, temperature
+                    questions, user_answers, api_key, temperature,
+                    enhanced_structured_output=enhanced_mode
                 )
                 for event in grading_stream:
                     yield event

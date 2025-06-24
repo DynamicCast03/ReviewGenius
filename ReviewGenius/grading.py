@@ -26,39 +26,15 @@ def _get_grading_prompt(question, user_answer, is_correct=None):
     return prompt_manager.get_prompt("grading_prompt", **prompt_context)
 
 
-def grade_multiple_choice_comment(question, user_answer, is_correct, api_key, temperature=0.7):
-    """
-    使用LLM为选择题生成反馈评语。
-    """
-    prompt = _get_grading_prompt(question, user_answer, is_correct)
-    messages = [{"role": "user", "content": prompt}]
-
-    try:
-        # 为简单起见，使用非流式调用
-        response = siliconflow_client.invoke_llm(
-            api_key=api_key,
-            model="Qwen/Qwen2.5-72B-Instruct",
-            messages=messages,
-            stream=False,
-            temperature=temperature,
-        )
-        
-        # invoke_llm在非流式模式下直接返回内容字符串
-        full_response = response
-        # 响应应该是一个JSON对象字符串，如 {"feedback": "..."}
-        parsed_json = json.loads(full_response)
-        return parsed_json.get("feedback", "AI评语生成失败。")
-
-    except Exception as e:
-        print(f"获取选择题评语时出错: {e}")
-        return "因发生错误，无法生成AI评语。"
-
-
-def grade_exam_stream(questions, user_answers, api_key, temperature=0.7):
+def grade_exam_stream(questions, user_answers, api_key, temperature=0.7, enhanced_structured_output: bool = False):
     """
     批改整份试卷，为每道题的批改过程生成事件。
     这是一个生成器函数。
     """
+    formatting_prompt = None
+    if enhanced_structured_output:
+        formatting_prompt = prompt_manager.get_prompt("grading_prompt_formatting")
+        
     for i, (question, user_answer) in enumerate(zip(questions, user_answers)):
         q_type = question.get("question_type")
 
@@ -71,17 +47,28 @@ def grade_exam_stream(questions, user_answers, api_key, temperature=0.7):
                 correct_answer = question.get("answer")
                 is_correct = user_answer == correct_answer
                 score = question.get("score", 0) if is_correct else 0
+                
+                prompt = _get_grading_prompt(question, user_answer, is_correct)
+                messages = [{"role": "user", "content": prompt}]
 
-                # 从LLM获取评语 (非流式)
-                feedback = grade_multiple_choice_comment(
-                    question, user_answer, is_correct, api_key, temperature
+                llm_stream = siliconflow_client.invoke_llm(
+                    api_key=api_key,
+                    model="Qwen/Qwen2.5-72B-Instruct",
+                    messages=messages,
+                    stream=True,
+                    temperature=temperature,
+                    enhanced_structured_output=enhanced_structured_output,
+                    formatting_prompt=formatting_prompt,
                 )
 
-                # 直接生成最终结果事件
-                final_data = {"score": score, "feedback": feedback}
-                yield json.dumps(
-                    {"type": "end", "question_index": i, "data": final_data}
-                ) + "\\n"
+                event_stream = stream_json_with_events(llm_stream)
+                
+                for event in event_stream:
+                    event["question_index"] = i
+                    if event["type"] == "end":
+                        # 注入本地判定的分数
+                        event["data"]["score"] = score
+                    yield json.dumps(event) + "\\n"
 
             elif q_type in ["fill_in_the_blank", "short_answer"]:
                 prompt = _get_grading_prompt(question, user_answer)
@@ -93,6 +80,8 @@ def grade_exam_stream(questions, user_answers, api_key, temperature=0.7):
                     messages=messages,
                     stream=True,
                     temperature=temperature,
+                    enhanced_structured_output=enhanced_structured_output,
+                    formatting_prompt=formatting_prompt,
                 )
 
                 # 使用事件生成器来处理JSON解析
