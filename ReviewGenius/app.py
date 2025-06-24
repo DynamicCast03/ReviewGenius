@@ -1,5 +1,7 @@
 import os
 import json
+import pdfplumber # 导入 pdfplumber
+import pptx # 导入 pptx
 from flask import (
     Flask,
     request,
@@ -7,8 +9,9 @@ from flask import (
     render_template,
     jsonify,
 )
+from flask_socketio import SocketIO, emit
 from openai import AuthenticationError
-from werkzeug.utils import secure_filename
+# from werkzeug.utils import secure_filename
 from filter import sanitizer
 import prompt_manager
 import siliconflow_client
@@ -17,12 +20,28 @@ from question_types import Question # Import base class for validation
 import grading # 导入评分模块
 
 app = Flask(__name__)
+# 添加CORS和SocketIO
+socketio = SocketIO(app, cors_allowed_origins="*")
 
 UPLOAD_FOLDER = "uploads"
 CONFIG_FILE = "config.json"
 app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024
-app.config["UPLOAD_EXTENSIONS"] = [".txt"]  # 仅支持txt
+app.config["UPLOAD_EXTENSIONS"] = [".txt", ".pdf", ".pptx", ".ppt"]  # 支持txt, pdf, pptx, ppt
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+def get_uploaded_files():
+    """获取上传目录中的文件列表，忽略隐藏文件。"""
+    try:
+        # Ignore hidden files like .DS_Store
+        return [f for f in os.listdir(UPLOAD_FOLDER) if os.path.isfile(os.path.join(UPLOAD_FOLDER, f)) and not f.startswith('.')]
+    except Exception:
+        return []
+
+def broadcast_file_list():
+    """向所有连接的客户端广播当前的文件列表"""
+    with app.app_context():
+        files = get_uploaded_files()
+        socketio.emit('file_list_update', {'files': files})
 
 def load_config():
     if not os.path.exists(CONFIG_FILE):
@@ -64,18 +83,79 @@ def manage_settings():
         save_config(config)
         return jsonify({"message": "设置已保存", "config": config})
 
+@app.route("/api/upload", methods=["POST"])
+def upload_file():
+    if 'files' not in request.files:
+        return jsonify({"error": "没有文件部分"}), 400
+    
+    uploaded_files = request.files.getlist("files")
+    uploaded_files = [f for f in uploaded_files if f.filename]
+
+    if not uploaded_files:
+        return jsonify({"error": "未上传或未选择任何文件"}), 400
+
+    errors = {}
+    success_files = []
+    for file in uploaded_files:
+        # filename = secure_filename(file.filename)
+        filename = file.filename
+        file_ext = os.path.splitext(filename)[1].lower()
+        if file_ext not in app.config["UPLOAD_EXTENSIONS"]:
+            errors[file.filename] = f"不支持的文件类型"
+            continue
+        
+        try:
+            file.save(os.path.join(UPLOAD_FOLDER, filename))
+            success_files.append(filename)
+        except Exception as e:
+            errors[file.filename] = f"保存文件失败: {str(e)}"
+
+    if not errors:
+        broadcast_file_list()
+        return jsonify({"message": "文件上传成功"}), 200
+
+    # 如果有错误，也广播列表以反映部分成功的上传
+    broadcast_file_list()
+    response = {"message": "部分或全部文件上传失败", "errors": errors, "success_files": success_files}
+    return jsonify(response), 400 if len(success_files) == 0 else 207
+
+@app.route("/api/files", methods=["GET"])
+def list_files():
+    try:
+        files = get_uploaded_files()
+        response = jsonify(files)
+        # 防止浏览器缓存文件列表
+        response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+        return response
+    except Exception as e:
+        return jsonify({"error": f"无法列出文件: {str(e)}"}), 500
+
+@app.route("/api/files/<filename>", methods=["DELETE"])
+def delete_file_route(filename):
+    # werkzeug.utils.secure_filename() is used to secure the filename before saving it.
+    # We should use the same function to secure the filename before deleting it.
+    # filename = secure_filename(filename)
+    file_path = os.path.join(UPLOAD_FOLDER, filename)
+    
+    if not os.path.exists(file_path):
+        return jsonify({"error": "文件未找到"}), 404
+        
+    try:
+        os.remove(file_path)
+        broadcast_file_list() # 广播更新后的文件列表
+        return jsonify({"message": f"文件 '{filename}' 已删除"}), 200
+    except Exception as e:
+        return jsonify({"error": f"删除文件失败: {str(e)}"}), 500
+
 @app.route("/api/process", methods=["POST"])
 def generate_exam():
-    if "file0" not in request.files:
-        return jsonify({"error": "未上传文件"}), 400
+    # 更改: 不再从请求中获取文件，而是扫描上传文件夹
+    uploaded_filenames = [f for f in os.listdir(UPLOAD_FOLDER) if os.path.isfile(os.path.join(UPLOAD_FOLDER, f)) and not f.startswith('.')]
 
-    file = request.files["file0"]
-    if file.filename == "":
-        return jsonify({"error": "未选择文件"}), 400
-
-    file_ext = os.path.splitext(file.filename)[1].lower()
-    if file_ext not in app.config["UPLOAD_EXTENSIONS"]:
-        return jsonify({"error": f"不支持的文件类型，请上传 {app.config['UPLOAD_EXTENSIONS']} 文件"}), 400
+    if not uploaded_filenames:
+        return jsonify({"error": "请先上传至少一个参考资料文件"}), 400
 
     try:
         user_text = request.form.get("user_input", "无特定要求")
@@ -118,7 +198,33 @@ def generate_exam():
         if not question_types_str:
             return jsonify({"error": "至少需要设置一种题型"}), 400
 
-        document_content = file.read().decode("utf-8")
+        document_contents = []
+        # 更改: 循环读取文件夹中的文件
+        for filename in uploaded_filenames:
+            file_path = os.path.join(UPLOAD_FOLDER, filename)
+            file_ext = os.path.splitext(filename)[1].lower()
+            content = ""
+            try:
+                if file_ext == ".pdf":
+                    with pdfplumber.open(file_path) as pdf:
+                        all_text = [page.extract_text() for page in pdf.pages if page.extract_text()]
+                        content = "\\n".join(all_text)
+                elif file_ext in [".pptx", ".ppt"]:
+                    pres = pptx.Presentation(file_path)
+                    all_text = []
+                    for slide in pres.slides:
+                        for shape in slide.shapes:
+                            if hasattr(shape, "text"):
+                                all_text.append(shape.text)
+                    content = "\\n".join(all_text)
+                else: # 默认为txt
+                    with open(file_path, 'r', encoding='utf-8') as f:
+                        content = f.read()
+            except Exception as e:
+                 return jsonify({"error": f"读取文件 '{filename}' 时出错: {str(e)}"}), 500
+
+            document_contents.append(f"--- 来自文件: {filename} ---\n{content}")
+        document_content = "\\n\\n".join(document_contents)
 
         scores_data = {
             "multiple_choice": question_settings["选择题"]["score"],
@@ -237,6 +343,18 @@ def grade_submission():
         print(error_msg)
         return jsonify({"error": error_msg}), 500
 
+@socketio.on('connect')
+def handle_connect():
+    """当客户端连接时，立即向其发送当前的文件列表"""
+    print('Client connected')
+    # 使用 with app.app_context() 来确保可以访问应用上下文
+    with app.app_context():
+        files = get_uploaded_files()
+        emit('file_list_update', {'files': files})
+
+@socketio.on('disconnect')
+def handle_disconnect():
+    print('Client disconnected')
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    socketio.run(app, host="0.0.0.0", port=5000, debug=True)

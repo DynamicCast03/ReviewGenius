@@ -1,4 +1,10 @@
 Flask==3.0.3
 openai==1.30.1
 werkzeug==3.0.3
-Jinja2 
+Jinja2==3.1.4
+pdfplumber==0.11.1
+httpx==0.27.0
+python-pptx==0.6.23
+Flask-SocketIO
+python-dotenv
+requests 
