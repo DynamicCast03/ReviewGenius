@@ -183,7 +183,7 @@
 								<input class="form-check-input" type="checkbox" role="switch" id="enhanced-structured-output" {% if config.enhanced_structured_output %}checked{% endif %}>
 								<label class="form-check-label" for="enhanced-structured-output">增强结构化输出</label>
 							</div>
-							<p class="form-text text-muted small">开启后，将尝试让模型返回更稳定、更易于解析的结构化数据。 (此功能暂未实现)</p>
+							<p class="form-text text-muted small">开启后，将会附加调用一次小模型对输出数据进行格式化检查，返回更稳定、更易于解析的结构化数据。会导致流式输出首字出现前需要一定时间的等待。</p>
 						</div>
 					</div>
 					<div class="modal-footer">
