@@ -167,6 +167,25 @@
 			</div>
 		</div>
 
+		<!-- Export Options Modal -->
+		<div class="modal fade" id="exportMarkdownModal" tabindex="-1" aria-labelledby="exportMarkdownModalLabel" aria-hidden="true">
+			<div class="modal-dialog modal-dialog-centered">
+				<div class="modal-content">
+					<div class="modal-header">
+						<h5 class="modal-title" id="exportMarkdownModalLabel">选择导出选项</h5>
+						<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+					</div>
+					<div class="modal-body">
+						<p>请选择答案在 Markdown 文件中的位置：</p>
+						<div class="d-grid gap-2">
+							<button type="button" class="btn btn-outline-primary" id="export-inline-btn">答案紧跟在每道题后面</button>
+							<button type="button" class="btn btn-outline-primary" id="export-end-btn">所有答案集中在文档末尾</button>
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+
 		<!-- Settings Modal -->
 		<div class="modal fade" id="settingsModal" tabindex="-1" aria-labelledby="settingsModalLabel" aria-hidden="true">
 			<div class="modal-dialog">
@@ -196,6 +215,8 @@
 				</div>
 			</div>
 		</div>
+
+		<div style="height: 80vh;"></div> <!-- 增加空白，使得页面可以向下滚动 -->
 
 		<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 		<!-- 引入 Socket.IO 客户端库 -->
@@ -392,6 +413,58 @@
 				let currentQuestions = [];
 				let userAnswers = {};
 				let eventSource = null;
+
+				const exportMarkdownModalEl = document.getElementById('exportMarkdownModal');
+				const exportMarkdownModal = new bootstrap.Modal(exportMarkdownModalEl);
+
+				document.getElementById('export-inline-btn').addEventListener('click', () => {
+					triggerMarkdownExport('inline');
+				});
+
+				document.getElementById('export-end-btn').addEventListener('click', () => {
+					triggerMarkdownExport('end');
+				});
+
+				async function triggerMarkdownExport(placement) {
+					exportMarkdownModal.hide();
+					
+					try {
+						const response = await fetch('/api/export/markdown', {
+							method: 'POST',
+							headers: { 'Content-Type': 'application/json' },
+							body: JSON.stringify({
+								questions: currentQuestions,
+								answers_placement: placement
+							})
+						});
+
+						if (!response.ok) {
+							const errData = await response.json();
+							throw new Error(errData.error || '导出失败');
+						}
+
+						const data = await response.json();
+						downloadMarkdown(data.markdown_content, 'review-genius-exam.md');
+
+					} catch (error) {
+						console.error('Markdown export error:', error);
+						alert(`导出 Markdown 出错: ${error.message}`);
+					}
+				}
+
+				function downloadMarkdown(content, filename) {
+					const blob = new Blob([content], { type: 'text/markdown;charset=utf-t8;' });
+					const link = document.createElement("a");
+					if (link.download !== undefined) { 
+						const url = URL.createObjectURL(blob);
+						link.setAttribute("href", url);
+						link.setAttribute("download", filename);
+						link.style.visibility = 'hidden';
+						document.body.appendChild(link);
+						link.click();
+						document.body.removeChild(link);
+					}
+				}
 
 				function formatQuestion(data) {
 					const typeMap = {
@@ -669,12 +742,26 @@
 				function addReviewControls() {
 					const controlsContainer = document.getElementById("controls-container");
 					controlsContainer.innerHTML = ''; // 清空现有控件
+
+					const buttonGroup = document.createElement('div');
+					buttonGroup.className = 'mt-4 d-grid gap-2 d-md-flex justify-content-md-center';
+
 					const startBtn = document.createElement('button');
 					startBtn.id = 'start-practice-btn';
 					startBtn.className = 'btn btn-primary btn-lg';
 					startBtn.textContent = '开始在线练习';
 					startBtn.addEventListener('click', showPracticePage);
-					controlsContainer.appendChild(startBtn);
+					buttonGroup.appendChild(startBtn);
+
+					const exportBtn = document.createElement('button');
+					exportBtn.id = 'export-md-btn';
+					exportBtn.className = 'btn btn-secondary btn-lg';
+					exportBtn.textContent = '导出为 Markdown';
+					exportBtn.setAttribute('data-bs-toggle', 'modal');
+					exportBtn.setAttribute('data-bs-target', '#exportMarkdownModal');
+					buttonGroup.appendChild(exportBtn);
+
+					controlsContainer.appendChild(buttonGroup);
 				}
 
 				function showReviewPage() {

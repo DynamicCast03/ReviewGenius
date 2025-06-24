@@ -18,6 +18,7 @@ import siliconflow_client
 from llm_json_parser import stream_json_with_events
 from question_types import Question # Import base class for validation
 import grading # 导入评分模块
+import markdown_exporter # 导入导出模块
 
 app = Flask(__name__)
 # 添加CORS和SocketIO
@@ -305,6 +306,24 @@ def generate_exam():
         print(error_msg)
         return jsonify({"error": error_msg}), 500
 
+@app.route("/api/export/markdown", methods=["POST"])
+def export_markdown():
+    try:
+        data = request.get_json()
+        questions = data.get("questions")
+        answers_placement = data.get("answers_placement", "inline")
+
+        if not questions:
+            return jsonify({"error": "没有提供题目数据"}), 400
+
+        markdown_content = markdown_exporter.export_to_markdown(questions, answers_placement)
+        
+        return jsonify({"markdown_content": markdown_content})
+
+    except Exception as e:
+        error_msg = f"导出Markdown时出错: {str(e)}"
+        print(error_msg)
+        return jsonify({"error": error_msg}), 500
 
 @app.route("/api/grade", methods=["POST"])
 def grade_submission():
