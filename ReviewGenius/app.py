@@ -46,6 +46,7 @@ def generate_exam():
         user_text = request.form.get("user_input", "无特定要求")
         user_text = sanitizer.sanitize(user_text)
         api_key = request.form.get("api_key")
+        temperature = float(request.form.get("temperature", "0.7"))
 
         if not api_key:
             return jsonify({"error": "API Key缺失"}), 400
@@ -104,6 +105,7 @@ def generate_exam():
                     model="Qwen/Qwen2.5-72B-Instruct",
                     messages=messages,
                     stream=True,
+                    temperature=temperature,
                 )
                 
                 # 使用新的事件生成器
@@ -144,6 +146,7 @@ def grade_submission():
         questions = data.get("questions")
         user_answers = data.get("answers")
         api_key = data.get("api_key")
+        temperature = data.get("temperature", 0.7)
 
         if not all([questions, user_answers, api_key]):
             return jsonify({"error": "缺少题目、答案或API Key"}), 400
@@ -151,7 +154,7 @@ def grade_submission():
         def generate_grade_stream():
             try:
                 grading_stream = grading.grade_exam_stream(
-                    questions, user_answers, api_key
+                    questions, user_answers, api_key, temperature
                 )
                 for event in grading_stream:
                     yield event

@@ -7,6 +7,7 @@ def invoke_llm(
     model: str,
     messages: List[Dict[str, str]],
     stream: bool = False,
+    temperature: float = 0.7,
 ) -> Union[Generator[str, None, None], str]:
     """
     Invokes the SiliconFlow Large Language Model.
@@ -15,6 +16,7 @@ def invoke_llm(
     :param model: The name of the model to use.
     :param messages: A list of message dictionaries.
     :param stream: Whether to return the response as a stream.
+    :param temperature: The sampling temperature.
     :return: A generator if stream is True, otherwise a string with the full response.
     """
     client = OpenAI(api_key=api_key, base_url="https://api.siliconflow.cn/v1")
@@ -22,7 +24,7 @@ def invoke_llm(
     if stream:
         def stream_generator():
             response = client.chat.completions.create(
-                model=model, messages=messages, stream=True
+                model=model, messages=messages, stream=True, temperature=temperature
             )
             for chunk in response:
                 if chunk.choices and chunk.choices[0].delta.content:
@@ -31,7 +33,7 @@ def invoke_llm(
         return stream_generator()
     else:
         response = client.chat.completions.create(
-            model=model, messages=messages, stream=False
+            model=model, messages=messages, stream=False, temperature=temperature
         )
         return response.choices[0].message.content
 

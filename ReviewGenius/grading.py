@@ -26,7 +26,7 @@ def _get_grading_prompt(question, user_answer, is_correct=None):
     return prompt_manager.get_prompt("grading_prompt", **prompt_context)
 
 
-def grade_multiple_choice_comment(question, user_answer, is_correct, api_key):
+def grade_multiple_choice_comment(question, user_answer, is_correct, api_key, temperature=0.7):
     """
     使用LLM为选择题生成反馈评语。
     """
@@ -40,6 +40,7 @@ def grade_multiple_choice_comment(question, user_answer, is_correct, api_key):
             model="Qwen/Qwen2.5-72B-Instruct",
             messages=messages,
             stream=False,
+            temperature=temperature,
         )
         
         # invoke_llm在非流式模式下直接返回内容字符串
@@ -53,7 +54,7 @@ def grade_multiple_choice_comment(question, user_answer, is_correct, api_key):
         return "因发生错误，无法生成AI评语。"
 
 
-def grade_exam_stream(questions, user_answers, api_key):
+def grade_exam_stream(questions, user_answers, api_key, temperature=0.7):
     """
     批改整份试卷，为每道题的批改过程生成事件。
     这是一个生成器函数。
@@ -73,7 +74,7 @@ def grade_exam_stream(questions, user_answers, api_key):
 
                 # 从LLM获取评语 (非流式)
                 feedback = grade_multiple_choice_comment(
-                    question, user_answer, is_correct, api_key
+                    question, user_answer, is_correct, api_key, temperature
                 )
 
                 # 直接生成最终结果事件
@@ -91,6 +92,7 @@ def grade_exam_stream(questions, user_answers, api_key):
                     model="Qwen/Qwen2.5-72B-Instruct",
                     messages=messages,
                     stream=True,
+                    temperature=temperature,
                 )
 
                 # 使用事件生成器来处理JSON解析

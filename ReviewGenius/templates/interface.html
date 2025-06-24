@@ -8,6 +8,7 @@
 			href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
 			rel="stylesheet"
 		/>
+		<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
 		<style>
 			body {
 				background-color: #f8f9fa;
@@ -22,16 +23,17 @@
 	</head>
 	<body>
 		<div class="container mt-5">
-			<div class="text-center mb-5">
-				<h1>ReviewGenius 智能出题系统</h1>
-				<p class="lead">
-					上传您的学习资料，选择题型和数量，即可生成一份高质量的练习卷。
-				</p>
+			<div class="text-center mb-5 d-flex justify-content-center align-items-center">
+				<h1 class="me-3">ReviewGenius 智能出题系统</h1>
+				<button type="button" class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#settingsModal">
+					<i class="bi bi-gear"></i>
+				</button>
 			</div>
 
 			<div class="row g-5">
 				<div class="col-md-4">
 					<form id="generate-form">
+						<input type="hidden" id="temperature" name="temperature" value="1.0">
 						<div class="mb-3">
 							<label for="file-upload" class="form-label fw-bold"
 								>1. 上传学习材料</label
@@ -162,10 +164,33 @@
 			</div>
 		</div>
 
+		<!-- Settings Modal -->
+		<div class="modal fade" id="settingsModal" tabindex="-1" aria-labelledby="settingsModalLabel" aria-hidden="true">
+			<div class="modal-dialog">
+				<div class="modal-content">
+					<div class="modal-header">
+						<h5 class="modal-title" id="settingsModalLabel">设置</h5>
+						<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+					</div>
+					<div class="modal-body">
+						<div class="mb-3">
+							<label for="temperature-slider" class="form-label">模型 Temperature: <span id="temperature-value">1.0</span></label>
+							<p class="form-text text-muted small">较低的值（如 0.2）会使输出更具确定性和一致性。较高的值（如 1.0）会带来更多的多样性和创造性。</p>
+							<input type="range" class="form-range" id="temperature-slider" min="0" max="2" step="0.1" value="1.0">
+						</div>
+					</div>
+					<div class="modal-footer">
+						<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+						<button type="button" class="btn btn-primary" id="save-settings">保存设置</button>
+					</div>
+				</div>
+			</div>
+		</div>
+
 		<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 		<script>
-			// API Key记忆功能
 			document.addEventListener('DOMContentLoaded', function() {
+				// API Key记忆功能
 				const apiKeyInput = document.getElementById('api_key');
 				const savedApiKey = localStorage.getItem('siliconflow_api_key');
 				if (savedApiKey) {
@@ -174,6 +199,35 @@
 
 				apiKeyInput.addEventListener('input', function() {
 					localStorage.setItem('siliconflow_api_key', apiKeyInput.value);
+				});
+
+				// Settings Modal Logic
+				const temperatureSlider = document.getElementById('temperature-slider');
+				const temperatureValueSpan = document.getElementById('temperature-value');
+				const saveSettingsBtn = document.getElementById('save-settings');
+				const temperatureInput = document.getElementById('temperature');
+				const settingsModalEl = document.getElementById('settingsModal');
+				const settingsModal = new bootstrap.Modal(settingsModalEl);
+
+
+				// Load saved temperature or use default
+				let currentTemperature = localStorage.getItem('llm_temperature') || '0.7';
+				temperatureSlider.value = currentTemperature;
+				temperatureValueSpan.textContent = currentTemperature;
+				temperatureInput.value = currentTemperature;
+
+				// Update span when slider is moved
+				temperatureSlider.addEventListener('input', function() {
+					temperatureValueSpan.textContent = temperatureSlider.value;
+				});
+
+				// Save settings when button is clicked
+				saveSettingsBtn.addEventListener('click', function() {
+					const newTemperature = temperatureSlider.value;
+					localStorage.setItem('llm_temperature', newTemperature);
+					temperatureInput.value = newTemperature;
+					console.log('Temperature saved:', newTemperature);
+					settingsModal.hide();
 				});
 			});
 
@@ -248,8 +302,7 @@
 
 				const toggleButton = card.querySelector('.toggle-answer');
 				toggleButton.addEventListener('click', function() {
-					const isCollapsed = this.getAttribute('aria-expanded') === 'true';
-					this.textContent = isCollapsed ? '显示答案' : '隐藏答案';
+					this.textContent = this.textContent.includes('显示') ? '隐藏答案' : '显示答案';
 				});
 
 				setTimeout(() => {
@@ -338,8 +391,7 @@
 				return card;
 			}
 
-
-			async function submitForGrading() {
+			function collectUserAnswers() {
 				const userAnswers = [];
 				const practiceCards = document.querySelectorAll('.practice-card');
 
@@ -357,14 +409,20 @@
 					}
 					userAnswers.push(answer);
 				});
+				return userAnswers;
+			}
 
+			async function submitForGrading() {
+				const userAnswers = collectUserAnswers();
+				const apiKey = localStorage.getItem('siliconflow_api_key');
+				const temperature = localStorage.getItem('llm_temperature') || '0.7';
+
+				// 禁用提交按钮
 				const submitBtn = document.getElementById('submit-practice-btn');
 				submitBtn.disabled = true;
 				submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> 正在初始化批改...';
 				
 				document.querySelectorAll('.practice-card input, .practice-card textarea').forEach(el => el.disabled = true);
-
-				const apiKey = localStorage.getItem('siliconflow_api_key');
 
 				try {
 					const response = await fetch('/api/grade', {
@@ -373,7 +431,8 @@
 						body: JSON.stringify({
 							questions: generatedQuestions,
 							answers: userAnswers,
-							api_key: apiKey
+							api_key: apiKey,
+							temperature: parseFloat(temperature)
 						})
 					});
 					
