@@ -153,7 +153,102 @@
 			</div>
 		</div>
 
+		<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 		<script>
+			// API Key记忆功能
+			document.addEventListener('DOMContentLoaded', function() {
+				const apiKeyInput = document.getElementById('api_key');
+				const savedApiKey = localStorage.getItem('siliconflow_api_key');
+				if (savedApiKey) {
+					apiKeyInput.value = savedApiKey;
+				}
+
+				apiKeyInput.addEventListener('input', function() {
+					localStorage.setItem('siliconflow_api_key', apiKeyInput.value);
+				});
+			});
+
+			function formatQuestion(data) {
+				const typeMap = {
+					multiple_choice: "选择题",
+					fill_in_the_blank: "填空题",
+					short_answer: "简答题",
+				};
+				const questionTypeName = typeMap[data.question_type] || "未知题型";
+
+				let content = `<p><strong>题型：</strong>${questionTypeName}</p>`;
+
+				if (data.stem) {
+					content += `<p><strong>题目：</strong>${data.stem.replace(
+						/___/g,
+						'<u style="padding: 0 1em;">&nbsp;&nbsp;&nbsp;</u>'
+					)}</p>`;
+				}
+
+				if (data.question_type === "multiple_choice" && data.options) {
+					content += '<p><strong>选项：</strong></p><ul class="list-group list-group-flush">';
+					for (const [key, value] of Object.entries(data.options)) {
+						content += `<li class="list-group-item">${key}. ${value}</li>`;
+					}
+					content += "</ul>";
+				}
+				return content;
+			}
+
+			function createQuestionCard(data, question_number) {
+				const card = document.createElement('div');
+				card.className = 'card mb-3 shadow-sm';
+				card.style.opacity = "0";
+                card.style.transform = "translateY(20px)";
+                card.style.transition = "opacity 0.5s ease, transform 0.5s ease";
+
+				let answerContent = '';
+				let answerHtml = "";
+				if (Array.isArray(data.answer)) {
+					answerHtml = data.answer.join(", ");
+				} else {
+					answerHtml = data.answer;
+				}
+
+				if (answerHtml) {
+					answerContent = `<p><strong>答案：</strong>${answerHtml}</p>`;
+				}
+				if (data.explanation) {
+					answerContent += `<p><strong>解析：</strong>${data.explanation}</p>`;
+				}
+
+				card.innerHTML = `
+					<div class="card-header d-flex justify-content-between align-items-center">
+						<strong>题目 ${question_number}</strong>
+						<span class="badge bg-secondary">${data.score}分</span>
+					</div>
+					<div class="card-body">
+						${formatQuestion(data)}
+						<button class="btn btn-info btn-sm mt-2 toggle-answer" data-bs-toggle="collapse" data-bs-target="#answer-${question_number}" aria-expanded="false" aria-controls="answer-${question_number}">
+							显示答案
+						</button>
+						<div class="collapse" id="answer-${question_number}">
+							<div class="card card-body mt-2 bg-light">
+								${answerContent}
+							</div>
+						</div>
+					</div>
+				`;
+
+				const toggleButton = card.querySelector('.toggle-answer');
+				toggleButton.addEventListener('click', function() {
+					const isCollapsed = this.getAttribute('aria-expanded') === 'true';
+					this.textContent = isCollapsed ? '显示答案' : '隐藏答案';
+				});
+
+				setTimeout(() => {
+                    card.style.opacity = "1";
+                    card.style.transform = "translateY(0)";
+                }, 10);
+
+				return card;
+			}
+
 			document
 				.getElementById("generate-form")
 				.addEventListener("submit", async function (event) {
@@ -275,65 +370,6 @@
 						spinner.classList.add("d-none");
 					}
 				});
-
-			function createQuestionCard(question, number) {
-				const card = document.createElement("div");
-				card.className = "card mb-3 shadow-sm";
-				card.style.opacity = "0";
-                card.style.transform = "translateY(20px)";
-                card.style.transition = "opacity 0.5s ease, transform 0.5s ease";
-
-				let optionsHtml = "";
-				if (
-					question.question_type === "multiple_choice" &&
-					question.options
-				) {
-					optionsHtml = '<ul class="list-group list-group-flush">';
-					for (const [key, value] of Object.entries(question.options)) {
-						optionsHtml += `<li class="list-group-item">${key}. ${value}</li>`;
-					}
-					optionsHtml += "</ul>";
-				}
-
-				let answerHtml = "";
-				if (Array.isArray(question.answer)) {
-					answerHtml = question.answer.join(", ");
-				} else {
-					answerHtml = question.answer;
-				}
-
-				const typeMap = {
-					multiple_choice: "选择题",
-					fill_in_the_blank: "填空题",
-					short_answer: "简答题",
-				};
-				const questionTypeName =
-					typeMap[question.question_type] || "未知题型";
-
-				card.innerHTML = `
-                    <div class="card-header d-flex justify-content-between align-items-center">
-                        <strong>${number}. ${questionTypeName}</strong>
-                        <span class="badge bg-secondary">${question.score}分</span>
-                    </div>
-                    <div class="card-body">
-                        <p class="card-text">${question.stem.replace(
-													/___/g,
-													'<u style="padding: 0 1em;">&nbsp;&nbsp;&nbsp;</u>'
-												)}</p>
-                        ${optionsHtml}
-                    </div>
-                    <div class="card-footer text-muted">
-                        <strong>答案:</strong> ${answerHtml}
-                    </div>
-                `;
-				
-                setTimeout(() => {
-                    card.style.opacity = "1";
-                    card.style.transform = "translateY(0)";
-                }, 10);
-
-				return card;
-			}
 		</script>
 	</body>
 </html>
