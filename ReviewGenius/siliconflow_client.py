@@ -1,6 +1,7 @@
 import os
 from openai import OpenAI, APIError
 from typing import List, Dict, Generator, Union
+from prompt_manager import get_prompt
 
 def invoke_llm(
     api_key: str,
@@ -32,6 +33,38 @@ def invoke_llm(
         api_key=api_key,
         base_url=os.environ.get("SILICONFLOW_API_BASE", "https://api.siliconflow.cn/v1"),
     )
+
+    # 提取用户输入内容进行安全检查
+    user_content = "\n".join([msg.get("content", "") for msg in messages])
+
+    if user_content.strip():
+        try:
+            # 从 prompt_manager 获取安全检查提示词
+            security_prompt = get_prompt("security_check_prompt")
+            security_check_messages = [
+                {"role": "system", "content": security_prompt},
+                {"role": "user", "content": f"请审查以下内容：\n\n---\n{user_content}\n---"}
+            ]
+
+            security_response = client.chat.completions.create(
+                model=model,
+                messages=security_check_messages,
+                stream=False,
+                temperature=0.7,
+                max_tokens=20,
+            )
+            security_result = security_response.choices[0].message.content.strip().lower()
+
+            if "unsafe" in security_result:
+                print(f"内容安全检查失败，模型返回: {security_result}")
+                raise ValueError("输入内容被判定为不安全，已拒绝处理。")
+
+        except FileNotFoundError:
+            # 如果提示文件不存在，可以选择是抛出异常还是记录警告后继续
+            print("警告: 未找到 'security_check_prompt.txt'，跳过内容安全检查。")
+        except APIError as e:
+            print(f"内容安全检查过程中调用模型失败: {e}")
+            raise e
 
     # 如果启用了增强结构化输出
     if enhanced_structured_output and formatting_prompt:

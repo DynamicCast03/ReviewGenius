@@ -181,6 +181,13 @@ def generate_exam():
 
             except AuthenticationError:
                 yield json.dumps({"type": "error", "error": "API Key 无效或已过期，请检查您的输入。", "error_type": "authentication"}) + "\\n"
+            except ValueError as e:
+                # 捕获由内容安全检查抛出的ValueError
+                if "输入内容被判定为不安全" in str(e):
+                    yield json.dumps({"type": "error", "error": str(e), "error_type": "security"}) + "\\n"
+                else:
+                    # 重新抛出其他类型的ValueError
+                    yield json.dumps({"type": "error", "error": f"生成过程中发生验证错误: {str(e)}", "error_type": "generation"}) + "\\n"
             except Exception as e:
                 # 捕获其他流式过程中的错误
                 yield json.dumps({"type": "error", "error": f"生成过程中发生错误: {str(e)}", "error_type": "generation"}) + "\\n"

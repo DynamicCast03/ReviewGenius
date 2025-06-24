@@ -609,6 +609,7 @@
 						let questionCounter = 1;
 						let currentCard = null;
 						let currentCardBody = null;
+						let streamEnded = false;
 
 						while (true) {
 							const { done, value } = await reader.read();
@@ -628,8 +629,22 @@
 										const event = JSON.parse(line);
 
 										if (event.type === 'error') {
-											throw new Error(event.error || '未知流错误');
+											console.error("Server Error:", event.error);
+											// 根据错误类型显示不同提示
+											if (event.error_type === "authentication") {
+												alert("API Key 验证失败，请检查您的 Key 是否正确或已过期。");
+											} else if (event.error_type === "security") {
+												alert("内容安全检查未通过，您的请求已被拒绝。请检查您上传的文档或输入的要求中是否包含不当内容。");
+											} else {
+												alert(`生成试卷时发生错误: ${event.error}`);
+											}
+											// 发生任何错误都应该重置按钮状态
+											resetGenerateButton();
+											streamEnded = true; // 标记流已结束
+											return; // 结束处理
 										}
+
+										if (streamEnded) return;
 
 										if (event.type === 'start') {
 											const cardId = `question-card-${questionCounter}`;
