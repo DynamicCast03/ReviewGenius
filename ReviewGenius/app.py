@@ -14,6 +14,7 @@ import prompt_manager
 import siliconflow_client
 from llm_json_parser import stream_json_with_events
 from question_types import Question # Import base class for validation
+import grading # 导入评分模块
 
 app = Flask(__name__)
 
@@ -55,13 +56,26 @@ def generate_exam():
         )
 
         question_settings = {
-            "选择题": request.form.get("choice_count", "0"),
-            "填空题": request.form.get("blank_count", "0"),
-            "简答题": str(short_answer_count),
+            "选择题": {
+                "count": request.form.get("choice_count", "0"),
+                "score": request.form.get("choice_score", "5"),
+            },
+            "填空题": {
+                "count": request.form.get("blank_count", "0"),
+                "score": request.form.get("blank_score", "5"),
+            },
+            "简答题": {
+                "count": str(short_answer_count),
+                "score": request.form.get("short_score", "10"),
+            },
         }
 
         question_types_str = "、".join(
-            [f"{k}{v}道" for k, v in question_settings.items() if int(v) > 0]
+            [
+                f"{k}{v['count']}道(每题{v['score']}分)"
+                for k, v in question_settings.items()
+                if int(v['count']) > 0
+            ]
         )
         if not question_types_str:
             return jsonify({"error": "至少需要设置一种题型"}), 400
@@ -73,6 +87,11 @@ def generate_exam():
             document_content=document_content,
             user_requirement=user_text,
             question_types=question_types_str,
+            scores={
+                "multiple_choice": question_settings["选择题"]["score"],
+                "fill_in_the_blank": question_settings["填空题"]["score"],
+                "short_answer": question_settings["简答题"]["score"],
+            },
         )
         
         messages = [{"role": "user", "content": prompt}]
@@ -114,6 +133,26 @@ def generate_exam():
 
     except Exception as e:
         error_msg = f"处理时出错: {str(e)}"
+        print(error_msg)
+        return jsonify({"error": error_msg}), 500
+
+
+@app.route("/api/grade", methods=["POST"])
+def grade_submission():
+    try:
+        data = request.get_json()
+        questions = data.get("questions")
+        user_answers = data.get("answers")
+
+        if not questions or not user_answers:
+            return jsonify({"error": "缺少题目或答案数据"}), 400
+
+        grading_results = grading.grade_exam(questions, user_answers)
+
+        return jsonify(grading_results)
+
+    except Exception as e:
+        error_msg = f"评分时出错: {str(e)}"
         print(error_msg)
         return jsonify({"error": error_msg}), 500
 

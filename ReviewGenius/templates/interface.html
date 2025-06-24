@@ -71,7 +71,7 @@
 						</div>
 						<div class="mb-4">
 							<label class="form-label fw-bold">4. 设置题型和数量</label>
-							<div class="row g-2">
+							<div class="row g-2 mb-2">
 								<div class="col">
 									<label for="choice_count" class="form-label"
 										>选择题</label
@@ -111,12 +111,20 @@
 										min="0"
 									/>
 								</div>
-								<input
-									type="hidden"
-									id="calc_count"
-									name="calc_count"
-									value="0"
-								/>
+							</div>
+							<div class="row g-2">
+								<div class="col">
+									<label for="choice_score" class="form-label">分值</label>
+									<input type="number" class="form-control" id="choice_score" name="choice_score" value="5" min="1">
+								</div>
+								<div class="col">
+									<label for="blank_score" class="form-label">分值</label>
+									<input type="number" class="form-control" id="blank_score" name="blank_score" value="5" min="1">
+								</div>
+								<div class="col">
+									<label for="short_score" class="form-label">分值</label>
+									<input type="number" class="form-control" id="short_score" name="short_score" value="10" min="1">
+								</div>
 							</div>
 						</div>
 						<button
@@ -149,6 +157,7 @@
 							点击"生成试卷"开始出题
 						</div>
 					</div>
+					<div id="controls-container" class="mt-3 text-center"></div>
 				</div>
 			</div>
 		</div>
@@ -167,6 +176,8 @@
 					localStorage.setItem('siliconflow_api_key', apiKeyInput.value);
 				});
 			});
+
+			let generatedQuestions = []; // 全局变量存储生成的题目
 
 			function formatQuestion(data) {
 				const typeMap = {
@@ -249,6 +260,178 @@
 				return card;
 			}
 
+			function startPractice() {
+                const formContainer = document.querySelector(".col-md-4");
+                const questionsContainer = document.getElementById("questions-container");
+                const controlsContainer = document.getElementById("controls-container");
+
+                formContainer.style.display = "none"; // 隐藏表单
+                questionsContainer.innerHTML = ""; // 清空题目预览
+                controlsContainer.innerHTML = ""; // 清空"开始练习"按钮
+
+                document.querySelector(".col-md-8").classList.replace("col-md-8", "col-md-12"); // 扩展宽度
+
+                const practiceTitle = document.createElement("h4");
+                practiceTitle.textContent = "在线练习";
+                questionsContainer.appendChild(practiceTitle);
+
+
+                generatedQuestions.forEach((q, index) => {
+                    const card = createPracticeCard(q, index + 1);
+                    questionsContainer.appendChild(card);
+                });
+
+				const submitBtn = document.createElement('button');
+				submitBtn.id = 'submit-practice-btn';
+				submitBtn.className = 'btn btn-success btn-lg mt-4';
+				submitBtn.textContent = '提交批改';
+				submitBtn.addEventListener('click', submitForGrading);
+				questionsContainer.appendChild(submitBtn);
+            }
+
+			function createPracticeCard(data, question_number) {
+				const card = document.createElement('div');
+				card.className = 'card mb-3 shadow-sm practice-card';
+				card.dataset.questionIndex = question_number - 1;
+
+				let questionContent = '';
+				const typeMap = {
+					multiple_choice: "选择题",
+					fill_in_the_blank: "填空题",
+					short_answer: "简答题",
+				};
+				const questionTypeName = typeMap[data.question_type] || "未知题型";
+
+				let answerArea = '';
+				if (data.question_type === 'multiple_choice') {
+					answerArea += '<ul class="list-group list-group-flush">';
+					for (const [key, value] of Object.entries(data.options)) {
+						answerArea += `<li class="list-group-item">
+							<input class="form-check-input me-1" type="radio" name="mcq-${question_number}" id="mcq-${question_number}-${key}" value="${key}">
+							<label class="form-check-label" for="mcq-${question_number}-${key}">${key}. ${value}</label>
+						</li>`;
+					}
+					answerArea += '</ul>';
+				} else if (data.question_type === 'fill_in_the_blank') {
+					let blank_count = 0;
+					const stemWithInputs = data.stem.replace(/___/g, () => {
+						blank_count++;
+						return `<input type="text" class="form-control d-inline-block fitb-input" style="width: 150px; margin: 0 5px;" data-blank-index="${blank_count-1}">`;
+					});
+					questionContent = `<p><strong>题目：</strong>${stemWithInputs}</p>`;
+				} else if (data.question_type === 'short_answer') {
+					answerArea = `<textarea class="form-control" rows="5" placeholder="在此输入你的答案..."></textarea>`;
+				}
+
+
+				card.innerHTML = `
+					<div class="card-header d-flex justify-content-between align-items-center">
+						<div><strong>题目 ${question_number} (${questionTypeName})</strong></div>
+						<span class="badge bg-secondary">${data.score}分</span>
+					</div>
+					<div class="card-body">
+						${questionContent || `<p><strong>题目：</strong>${data.stem}</p>`}
+						<div class="answer-area mt-3">${answerArea}</div>
+						<div class="result-area mt-3" style="display: none;"></div>
+					</div>
+				`;
+				return card;
+			}
+
+
+			async function submitForGrading() {
+				const userAnswers = [];
+				const practiceCards = document.querySelectorAll('.practice-card');
+
+				practiceCards.forEach((card, index) => {
+					const question = generatedQuestions[index];
+					let answer;
+					if (question.question_type === 'multiple_choice') {
+						const checked = card.querySelector('input[type="radio"]:checked');
+						answer = checked ? checked.value : null;
+					} else if (question.question_type === 'fill_in_the_blank') {
+						const inputs = card.querySelectorAll('.fitb-input');
+						answer = Array.from(inputs).map(input => input.value);
+					} else if (question.question_type === 'short_answer') {
+						answer = card.querySelector('textarea').value;
+					}
+					userAnswers.push(answer);
+				});
+
+				const submitBtn = document.getElementById('submit-practice-btn');
+				submitBtn.disabled = true;
+				submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> 正在批改...';
+
+
+				try {
+					const response = await fetch('/api/grade', {
+						method: 'POST',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({
+							questions: generatedQuestions,
+							answers: userAnswers
+						})
+					});
+					
+					if (!response.ok) {
+						const errData = await response.json();
+						throw new Error(errData.error || '批改失败');
+					}
+
+					const results = await response.json();
+					displayGradingResults(results);
+
+				} catch(error) {
+					alert(`批改时出错: ${error.message}`);
+					submitBtn.disabled = false;
+					submitBtn.textContent = '提交批改';
+				}
+			}
+
+
+			function displayGradingResults(results) {
+				const practiceCards = document.querySelectorAll('.practice-card');
+				let totalScore = 0;
+				let earnedScore = 0;
+
+				results.forEach((result, index) => {
+					const card = practiceCards[index];
+					const question = generatedQuestions[index];
+					totalScore += question.score;
+					earnedScore += result.score;
+
+					const resultArea = card.querySelector('.result-area');
+					const scoreColor = result.score === question.score ? 'text-success' : (result.score > 0 ? 'text-warning' : 'text-danger');
+
+					let resultHtml = `
+						<h5>批改结果</h5>
+						<p><strong>得分：<span class="${scoreColor}">${result.score}</span> / ${question.score}</strong></p>
+					`;
+
+					if (question.question_type === 'multiple_choice') {
+						resultHtml += `<p><strong>正确答案：</strong>${question.answer}</p>`;
+					} else {
+						resultHtml += `<p><strong>参考答案：</strong>${Array.isArray(question.answer) ? question.answer.join(', ') : question.answer}</p>`;
+					}
+
+					resultHtml += `<p><strong>AI点评：</strong>${result.feedback}</p>`;
+
+					resultArea.innerHTML = resultHtml;
+					resultArea.style.display = 'block';
+
+					// 禁用输入
+					card.querySelectorAll('input, textarea').forEach(el => el.disabled = true);
+				});
+
+				const submitBtn = document.getElementById('submit-practice-btn');
+				submitBtn.remove();
+
+				const overallResult = document.createElement('div');
+				overallResult.className = 'alert alert-info mt-4';
+				overallResult.innerHTML = `<h4>练习完成！</h4><p class="mb-0"><strong>总得分：${earnedScore} / ${totalScore}</strong></p>`;
+				document.getElementById('questions-container').appendChild(overallResult);
+			}
+
 			document
 				.getElementById("generate-form")
 				.addEventListener("submit", async function (event) {
@@ -286,6 +469,7 @@
 						}
 
 						questionsContainer.innerHTML = ""; // 清空等待提示
+						generatedQuestions = []; // 重置题目
 
 						const reader = response.body.getReader();
 						const decoder = new TextDecoder();
@@ -337,6 +521,7 @@
 											questionsContainer.scrollTop = questionsContainer.scrollHeight;
 										} else if (event.type === 'end' && currentCard) {
 											const finalData = event.data;
+											generatedQuestions.push(finalData); // 存储题目数据
 											// 使用现有的函数来格式化最终的卡片内容
 											const finalCard = createQuestionCard(finalData, questionCounter);
 											// 替换掉临时的流式卡片
@@ -362,6 +547,16 @@
 						if (buffer.trim()) {
 							console.log("Finished with non-empty buffer:", buffer);
 						}
+
+						// 全部题目加载完成后显示"开始练习"按钮
+						const controlsContainer = document.getElementById("controls-container");
+						const practiceBtn = document.createElement("button");
+						practiceBtn.id = "start-practice-btn";
+						practiceBtn.className = "btn btn-info btn-lg";
+						practiceBtn.textContent = "开始练习";
+						practiceBtn.onclick = startPractice;
+						controlsContainer.innerHTML = "";
+						controlsContainer.appendChild(practiceBtn);
 
 					} catch (error) {
 						questionsContainer.innerHTML = `<div class="alert alert-danger" role="alert"><strong>出错了:</strong> ${error.message}</div>`;
