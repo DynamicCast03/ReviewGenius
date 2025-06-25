@@ -19,6 +19,8 @@ from llm_json_parser import stream_json_with_events
 from question_types import Question # Import base class for validation
 import grading # 导入评分模块
 import markdown_exporter # 导入导出模块
+import user_profile_manager
+import threading
 
 app = Flask(__name__)
 # 添加CORS和SocketIO
@@ -45,26 +47,33 @@ def broadcast_file_list():
         socketio.emit('file_list_update', {'files': files})
 
 def load_config():
+    default_profile = "该用户暂无画像，请根据本次答题情况生成一份初始画像。"
     if not os.path.exists(CONFIG_FILE):
         default_config = {
             "temperature": 1.0,
-            "enhanced_structured_output": False
+            "enhanced_structured_output": False,
+            "user_profile": default_profile
         }
         with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
-            json.dump(default_config, f, indent=4)
+            json.dump(default_config, f, indent=4, ensure_ascii=False)
         return default_config
     try:
         with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
-            return json.load(f)
+            config = json.load(f)
+            # 确保旧配置文件也能兼容
+            if "user_profile" not in config:
+                config["user_profile"] = default_profile
+            return config
     except (json.JSONDecodeError, FileNotFoundError):
         return {
             "temperature": 1.0,
-            "enhanced_structured_output": False
+            "enhanced_structured_output": False,
+            "user_profile": default_profile
         }
 
 def save_config(config_data):
     with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
-        json.dump(config_data, f, indent=4)
+        json.dump(config_data, f, indent=4, ensure_ascii=False)
 
 @app.route("/")
 def index():
@@ -81,6 +90,10 @@ def manage_settings():
         config = load_config()
         config["temperature"] = float(data.get("temperature", config["temperature"]))
         config["enhanced_structured_output"] = bool(data.get("enhanced_structured_output", config["enhanced_structured_output"]))
+        # 添加对 user_profile 的处理
+        if "user_profile" in data:
+            config["user_profile"] = str(data.get("user_profile", ""))
+        
         save_config(config)
         return jsonify({"message": "设置已保存", "config": config})
 
@@ -434,6 +447,44 @@ def export_markdown():
         print(error_msg)
         return jsonify({"error": error_msg}), 500
 
+def _update_profile_task(api_key, questions, user_answers):
+    """在后台线程中生成答题总结并更新用户画像。"""
+    # 使用 app_context 确保可以访问应用配置等
+    with app.app_context():
+        try:
+            # 1. 准备生成总结的Prompt
+            summary_prompt = prompt_manager.get_prompt(
+                "grading_summary_prompt",
+                questions_with_answers=json.dumps(questions, ensure_ascii=False, indent=2),
+                user_answers=json.dumps(user_answers, ensure_ascii=False, indent=2),
+            )
+            
+            # 2. 调用LLM生成总结 (非流式)
+            llm_response = siliconflow_client.invoke_llm(
+                api_key=api_key,
+                model="Qwen/Qwen2.5-72B-Instruct",
+                messages=[{"role": "user", "content": summary_prompt}],
+                stream=False,
+                temperature=0.6 # 使用中等温度以获得有洞察力的分析
+            )
+            grading_summary = llm_response.choices[0].message.content.strip()
+
+            if not grading_summary:
+                print("LLM返回了空的答题总结，跳过用户画像更新。")
+                return
+
+            # 3. 使用总结更新用户画像
+            print(f"生成的答题总结: {grading_summary}")
+            updated_profile = user_profile_manager.update_user_profile(grading_summary, api_key)
+
+            if updated_profile:
+                print(f"用户画像已成功更新: {updated_profile}")
+            else:
+                print("用户画像更新失败。")
+
+        except Exception as e:
+            print(f"后台更新用户画像任务失败: {e}")
+
 @app.route("/api/grade", methods=["POST"])
 def grade_submission():
     try:
@@ -450,13 +501,23 @@ def grade_submission():
             return jsonify({"error": "缺少题目、答案或API Key"}), 400
 
         def generate_grade_stream():
+            grading_results = []
             try:
                 grading_stream = grading.grade_exam_stream(
                     questions, user_answers, api_key, temperature,
                     enhanced_structured_output=enhanced_mode
                 )
-                for event in grading_stream:
-                    yield event
+                for event_str in grading_stream:
+                    yield event_str + "\n" # 将原始事件字符串传递给前端
+                
+                # 在流结束后，启动后台任务更新用户画像
+                # 确保grading_results不为空
+                thread = threading.Thread(
+                    target=_update_profile_task,
+                    args=(api_key, questions, user_answers)
+                )
+                thread.start()
+
             except Exception as e:
                 error_event = {
                     "type": "error",

@@ -39,7 +39,7 @@ def grade_exam_stream(questions, user_answers, api_key, temperature=0.7, enhance
         q_type = question.get("question_type")
 
         # 为每道题的开始发送一个事件
-        yield json.dumps({"type": "start", "question_index": i}) + "\\n"
+        yield json.dumps({"type": "start", "question_index": i}) + "\n"
 
         try:
             if q_type == "multiple_choice":
@@ -68,7 +68,7 @@ def grade_exam_stream(questions, user_answers, api_key, temperature=0.7, enhance
                     if event["type"] == "end":
                         # 注入本地判定的分数
                         event["data"]["score"] = score
-                    yield json.dumps(event) + "\\n"
+                    yield json.dumps(event) + "\n"
 
             elif q_type in ["fill_in_the_blank", "short_answer"]:
                 prompt = _get_grading_prompt(question, user_answer)
@@ -90,14 +90,14 @@ def grade_exam_stream(questions, user_answers, api_key, temperature=0.7, enhance
                 for event in event_stream:
                     # 为每个事件添加题目索引
                     event["question_index"] = i
-                    yield json.dumps(event) + "\\n"
+                    yield json.dumps(event) + "\n"
 
             else:
                 # 处理未知题型
                 error_data = {"score": 0, "feedback": "未知题型，无法批改。"}
                 yield json.dumps(
                     {"type": "end", "question_index": i, "data": error_data}
-                ) + "\\n"
+                ) + "\n"
 
         except AuthenticationError:
             yield json.dumps(
@@ -106,7 +106,7 @@ def grade_exam_stream(questions, user_answers, api_key, temperature=0.7, enhance
                     "question_index": i,
                     "error": "API Key 无效或已过期。",
                 }
-            ) + "\\n"
+            ) + "\n"
         except Exception as e:
             yield json.dumps(
                 {
@@ -114,4 +114,4 @@ def grade_exam_stream(questions, user_answers, api_key, temperature=0.7, enhance
                     "question_index": i,
                     "error": f"批改过程中发生错误: {str(e)}",
                 }
-            ) + "\\n"
+            ) + "\n"

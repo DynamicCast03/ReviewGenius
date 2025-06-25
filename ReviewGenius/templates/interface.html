@@ -22,6 +22,9 @@
 		</style>
 	</head>
 	<body>
+		<div id="alert-container" class="position-fixed top-0 start-50 translate-middle-x p-3" style="z-index: 1056; width: fit-content;">
+			<!-- Dynamic alerts will be injected here -->
+		</div>
 		<div class="container mt-5">
 			<div class="text-center mb-5 d-flex justify-content-center align-items-center">
 				<h1 class="me-3">ReviewGenius 智能出题系统</h1>
@@ -86,7 +89,7 @@
 										class="form-control"
 										id="choice_count"
 										name="choice_count"
-										value="2"
+										value="0"
 										min="0"
 									/>
 								</div>
@@ -99,7 +102,7 @@
 										class="form-control"
 										id="blank_count"
 										name="blank_count"
-										value="2"
+										value="0"
 										min="0"
 									/>
 								</div>
@@ -195,17 +198,24 @@
 						<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
 					</div>
 					<div class="modal-body">
-						<div class="mb-3">
-							<label for="temperature-slider" class="form-label">模型 Temperature: <span id="temperature-value">{{ config.temperature }}</span></label>
-							<p class="form-text text-muted small">较低的值（如 0.2）会使输出更具确定性和一致性。较高的值（如 1.0）会带来更多的多样性和创造性。</p>
-							<input type="range" class="form-range" id="temperature-slider" min="0" max="2" step="0.1" value="{{ config.temperature }}">
+						<div class="form-group">
+							<label for="temperature-slider">模型温度 (Temperature): <span id="temperature-value">1.0</span></label>
+							<input type="range" class="custom-range" id="temperature-slider" min="0" max="2" step="0.1" value="1.0">
+							<small class="form-text text-muted">值越高，回答越随机和有创造性；值越低，回答越确定和保守。</small>
 						</div>
-						<div class="mb-3">
-							<div class="form-check form-switch">
-								<input class="form-check-input" type="checkbox" role="switch" id="enhanced-structured-output" {% if config.enhanced_structured_output %}checked{% endif %}>
-								<label class="form-check-label" for="enhanced-structured-output">增强结构化输出</label>
-							</div>
-							<p class="form-text text-muted small">开启后，将会附加调用一次小模型对输出数据进行格式化检查，返回更稳定、更易于解析的结构化数据。会导致流式输出首字出现前需要一定时间的等待。</p>
+						<div class="form-check">
+							<input class="form-check-input" type="checkbox" value="" id="enhanced-structured-output">
+							<label class="form-check-label" for="enhanced-structured-output">
+								增强型结构化输出 (实验性)
+							</label>
+							<small class="form-text text-muted">开启后，将会附加调用一次小模型对输出数据进行格式化检查，返回更
+								稳定的结构化数据。会导致流式输出首字出现前需要一定时间的等待。</small>
+						</div>
+						<!-- 用户画像编辑区 -->
+						<div class="form-group mt-4">
+							<label for="user-profile-editor">用户画像 (User Profile)</label>
+							<textarea class="form-control" id="user-profile-editor" rows="6"></textarea>
+							<small class="form-text text-muted">在这里查看和编辑您的学习画像。此画像将影响未来的出题和评分风格。</small>
 						</div>
 					</div>
 					<div class="modal-footer">
@@ -363,14 +373,24 @@
 				const temperatureInput = document.getElementById('temperature');
 				const settingsModalEl = document.getElementById('settingsModal');
 				const settingsModal = new bootstrap.Modal(settingsModalEl);
-
 				const enhancedOutputSwitch = document.getElementById('enhanced-structured-output');
+				const userProfileEditor = document.getElementById('user-profile-editor');
 
-				// Load saved temperature or use default
-				let currentTemperature = localStorage.getItem('llm_temperature') || '0.7';
-				temperatureSlider.value = currentTemperature;
-				temperatureValueSpan.textContent = currentTemperature;
-				temperatureInput.value = currentTemperature;
+				// Load settings from backend when modal is shown
+				settingsModalEl.addEventListener('show.bs.modal', function() {
+					fetch('/api/settings')
+						.then(response => response.json())
+						.then(config => {
+							temperatureSlider.value = config.temperature;
+							temperatureValueSpan.textContent = config.temperature;
+							enhancedOutputSwitch.checked = config.enhanced_structured_output;
+							userProfileEditor.value = config.user_profile;
+						})
+						.catch(error => {
+							console.error('Error fetching settings:', error);
+							showAlert('无法加载设置！', 'danger');
+						});
+				});
 
 				// Update span when slider is moved
 				temperatureSlider.addEventListener('input', function() {
@@ -381,10 +401,12 @@
 				saveSettingsBtn.addEventListener('click', function() {
 					const newTemperature = temperatureSlider.value;
 					const enhancedOutput = enhancedOutputSwitch.checked;
+					const userProfile = userProfileEditor.value;
 					
 					const settings = {
-						temperature: newTemperature,
-						'enhanced_structured_output': enhancedOutput
+						temperature: parseFloat(newTemperature),
+						'enhanced_structured_output': enhancedOutput,
+						'user_profile': userProfile
 					};
 
 					fetch('/api/settings', {
@@ -397,13 +419,13 @@
 					.then(response => response.json())
 					.then(data => {
 						console.log('Settings saved:', data);
-						// Update the hidden input for the main form if needed
 						temperatureInput.value = newTemperature;
 						settingsModal.hide();
+						showAlert('设置已保存', 'success');
 					})
 					.catch(error => {
 						console.error('Error saving settings:', error);
-						alert('保存设置失败！');
+						showAlert('保存设置失败！', 'danger');
 					});
 				});
 
@@ -965,13 +987,29 @@
 					});
 
 				function showAlert(message, type = 'info') {
-					const toastContainer = document.getElementById('toast-container');
-					const toastEl = document.createElement('div');
-					toastEl.className = `alert alert-${type} mt-3`;
-					toastEl.textContent = message;
-					toastContainer.appendChild(toastEl);
-					const toast = new bootstrap.Toast(toastEl, { delay: 5000 });
-					toast.show();
+					const alertContainer = document.getElementById('alert-container');
+					if (!alertContainer) return;
+
+					// Map custom types to bootstrap alert types
+					const alertType = type === 'error' ? 'danger' : type;
+
+					const wrapper = document.createElement('div');
+					wrapper.innerHTML = [
+						`<div class="alert alert-${alertType} alert-dismissible fade show" role="alert">`,
+						`   <div>${message}</div>`,
+						'   <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>',
+						'</div>'
+					].join('');
+
+					alertContainer.append(wrapper);
+
+					// Automatically remove the alert after 5 seconds
+					setTimeout(() => {
+						const alert = wrapper.querySelector('.alert');
+						if (alert) {
+							bootstrap.Alert.getOrCreateInstance(alert).close();
+						}
+					}, 5000);
 				}
 
 				async function handleRegenerateClick(button, action) {
