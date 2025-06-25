@@ -85,3 +85,27 @@
 2025-06-25 11:22:01,818 - app - INFO - 用户画像已成功更新: 该生在军事基础知识和忧患危机意识等核心概念的理解上表现出一定的扎实基础，能够准确回答选择题和填空题。然而，最近一次考试中，其在简答题部分的表现显著下降，尤其在军事理论课程的目标和内容方面存在明显的知识盲区，未能达到课程的基本要求。学生在分析、归纳和应用能力上存在明显不足，特别是在综合运用知识回答问题时表现尤为薄弱。建议继续巩固基础知识，同时加强逻辑思维训练和表达能力的提升，尤其是简答题的答题技巧。
 2025-06-25 11:22:01,838 - app - INFO - Client disconnected
 2025-06-25 11:22:01,848 - app - INFO - Client connected
+2025-06-25 11:40:12,669 - werkzeug - INFO -  * Restarting with stat
+2025-06-25 11:40:13,264 - werkzeug - WARNING -  * Debugger is active!
+2025-06-25 11:40:13,271 - werkzeug - INFO -  * Debugger PIN: 420-448-176
+2025-06-25 11:40:16,903 - app - INFO - Client connected
+2025-06-25 11:40:17,215 - app - INFO - Client disconnected
+2025-06-25 11:40:17,340 - app - INFO - Client connected
+2025-06-25 11:40:29,863 - app - INFO - 开始生成试卷. 文件: ['2025年春军理教学计划.pdf'], 要求: 简答题1道(每题10分)
+2025-06-25 11:40:30,005 - app - INFO - 所有文件内容已聚合，总长度: 3084
+2025-06-25 11:40:30,007 - app - INFO - 返回试卷生成流.
+2025-06-25 11:40:30,036 - siliconflow_client - INFO - 执行内容安全检查.
+2025-06-25 11:40:31,625 - httpx - INFO - HTTP Request: POST https://api.siliconflow.cn/v1/chat/completions "HTTP/1.1 200 OK"
+2025-06-25 11:40:31,632 - siliconflow_client - INFO - 内容安全检查通过.
+2025-06-25 11:40:31,632 - siliconflow_client - INFO - 开始标准LLM调用. Model: Qwen/Qwen2.5-72B-Instruct, Stream: True, Temp: 0.6
+2025-06-25 11:40:32,796 - httpx - INFO - HTTP Request: POST https://api.siliconflow.cn/v1/chat/completions "HTTP/1.1 200 OK"
+2025-06-25 11:40:43,895 - app - INFO - 开始批改试卷. 题目数: 1
+2025-06-25 11:40:43,895 - app - INFO - 返回批改结果流.
+2025-06-25 11:40:43,895 - grading - INFO - 开始批改第 1 题, 类型: short_answer
+2025-06-25 11:40:43,895 - grading - INFO - 第 1 题 (short_answer) 使用LLM判分.
+2025-06-25 11:40:43,939 - siliconflow_client - INFO - 执行内容安全检查.
+2025-06-25 11:40:44,511 - httpx - INFO - HTTP Request: POST https://api.siliconflow.cn/v1/chat/completions "HTTP/1.1 200 OK"
+2025-06-25 11:40:44,513 - siliconflow_client - INFO - 内容安全检查通过.
+2025-06-25 11:40:44,513 - siliconflow_client - INFO - 开始标准LLM调用. Model: Qwen/Qwen2.5-72B-Instruct, Stream: True, Temp: 0.6
+2025-06-25 11:40:44,878 - httpx - INFO - HTTP Request: POST https://api.siliconflow.cn/v1/chat/completions "HTTP/1.1 200 OK"
+2025-06-25 11:40:51,117 - app - INFO - 用户画像功能未启用，跳过更新。

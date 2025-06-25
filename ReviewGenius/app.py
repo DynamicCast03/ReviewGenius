@@ -76,7 +76,8 @@ def load_config():
         default_config = {
             "temperature": 1.0,
             "enhanced_structured_output": False,
-            "user_profile": default_profile
+            "user_profile": default_profile,
+            "user_profile_enabled": True
         }
         with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
             json.dump(default_config, f, indent=4, ensure_ascii=False)
@@ -87,12 +88,15 @@ def load_config():
             # 确保旧配置文件也能兼容
             if "user_profile" not in config:
                 config["user_profile"] = default_profile
+            if "user_profile_enabled" not in config:
+                config["user_profile_enabled"] = True
             return config
     except (json.JSONDecodeError, FileNotFoundError):
         return {
             "temperature": 1.0,
             "enhanced_structured_output": False,
-            "user_profile": default_profile
+            "user_profile": default_profile,
+            "user_profile_enabled": True
         }
 
 def save_config(config_data):
@@ -114,6 +118,7 @@ def manage_settings():
         config = load_config()
         config["temperature"] = float(data.get("temperature", config["temperature"]))
         config["enhanced_structured_output"] = bool(data.get("enhanced_structured_output", config["enhanced_structured_output"]))
+        config["user_profile_enabled"] = bool(data.get("user_profile_enabled", config.get("user_profile_enabled", True)))
         # 添加对 user_profile 的处理
         if "user_profile" in data:
             config["user_profile"] = str(data.get("user_profile", ""))
@@ -202,6 +207,11 @@ def generate_exam():
         
         config = load_config()
         temperature = config.get("temperature", 1.0)
+        
+        if config.get("user_profile_enabled", True):
+            user_profile = config.get("user_profile", "该用户暂无画像，请根据本次答题情况生成一份初始画像。")
+        else:
+            user_profile = "用户画像功能未开启。"
 
         if not api_key:
             return jsonify({"error": "API Key缺失"}), 400
@@ -281,7 +291,8 @@ def generate_exam():
         user_requirement=user_text,
         question_types=question_types_str,
         formatting_instructions=formatting_instructions,
-        scores=scores_data)
+        scores=scores_data,
+        user_profile=user_profile)
         
         messages = [{"role": "user", "content": main_prompt}]
 
@@ -546,14 +557,17 @@ def grade_submission():
                 for event_str in grading_stream:
                     yield event_str + "\n" # 将原始事件字符串传递给前端
                 
-                # 在流结束后，启动后台任务更新用户画像
-                # 确保grading_results不为空
-                app.logger.info("批改完成，启动后台任务更新用户画像.")
-                thread = threading.Thread(
-                    target=_update_profile_task,
-                    args=(api_key, questions, user_answers)
-                )
-                thread.start()
+                # 在流结束后，如果启用了用户画像功能，则启动后台任务更新
+                config = load_config()
+                if config.get("user_profile_enabled", True):
+                    app.logger.info("用户画像功能已启用，启动后台任务更新用户画像。")
+                    thread = threading.Thread(
+                        target=_update_profile_task,
+                        args=(api_key, questions, user_answers)
+                    )
+                    thread.start()
+                else:
+                    app.logger.info("用户画像功能未启用，跳过更新。")
 
             except Exception as e:
                 error_event = {

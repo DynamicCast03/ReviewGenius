@@ -211,11 +211,17 @@
 							<small class="form-text text-muted">开启后，将会附加调用一次小模型对输出数据进行格式化检查，返回更
 								稳定的结构化数据。会导致流式输出首字出现前需要一定时间的等待。</small>
 						</div>
+						<!-- 用户画像功能开关 -->
+						<div class="form-check form-switch mt-3">
+							<input class="form-check-input" type="checkbox" id="user-profile-enabled">
+							<label class="form-check-label" for="user-profile-enabled">启用用户画像功能</label>
+							<small class="form-text text-muted d-block">启用后，系统将根据您的答题历史生成和使用用户画像，以提供更个性化的出题和评分。</small>
+						</div>
 						<!-- 用户画像编辑区 -->
-						<div class="form-group mt-4">
+						<div class="form-group mt-3">
 							<label for="user-profile-editor">用户画像 (User Profile)</label>
 							<textarea class="form-control" id="user-profile-editor" rows="6"></textarea>
-							<small class="form-text text-muted">在这里查看和编辑您的学习画像。此画像将影响未来的出题和评分风格。</small>
+							<small class="form-text text-muted">在这里查看和编辑您的学习画像。此画像将影响未来的出题和评分。</small>
 						</div>
 					</div>
 					<div class="modal-footer">
@@ -375,6 +381,7 @@
 				const settingsModal = new bootstrap.Modal(settingsModalEl);
 				const enhancedOutputSwitch = document.getElementById('enhanced-structured-output');
 				const userProfileEditor = document.getElementById('user-profile-editor');
+				const userProfileEnabledSwitch = document.getElementById('user-profile-enabled');
 
 				// Load settings from backend when modal is shown
 				settingsModalEl.addEventListener('show.bs.modal', function() {
@@ -384,12 +391,21 @@
 							temperatureSlider.value = config.temperature;
 							temperatureValueSpan.textContent = config.temperature;
 							enhancedOutputSwitch.checked = config.enhanced_structured_output;
+							userProfileEnabledSwitch.checked = config.user_profile_enabled;
 							userProfileEditor.value = config.user_profile;
+
+							// 根据开关状态决定编辑器是否可用
+							userProfileEditor.disabled = !config.user_profile_enabled;
 						})
 						.catch(error => {
 							console.error('Error fetching settings:', error);
 							showAlert('无法加载设置！', 'danger');
 						});
+				});
+
+				// 根据开关状态动态禁用/启用编辑器
+				userProfileEnabledSwitch.addEventListener('change', function() {
+					userProfileEditor.disabled = !this.checked;
 				});
 
 				// Update span when slider is moved
@@ -402,10 +418,12 @@
 					const newTemperature = temperatureSlider.value;
 					const enhancedOutput = enhancedOutputSwitch.checked;
 					const userProfile = userProfileEditor.value;
+					const userProfileEnabled = userProfileEnabledSwitch.checked;
 					
 					const settings = {
 						temperature: parseFloat(newTemperature),
 						'enhanced_structured_output': enhancedOutput,
+						'user_profile_enabled': userProfileEnabled,
 						'user_profile': userProfile
 					};
 
