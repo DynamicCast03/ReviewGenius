@@ -2,6 +2,9 @@ import os
 from openai import OpenAI, APIError
 from typing import List, Dict, Generator, Union
 from prompt_manager import get_prompt
+import logging
+
+logger = logging.getLogger(__name__)
 
 def invoke_llm(
     api_key: str,
@@ -40,6 +43,7 @@ def invoke_llm(
     if user_content.strip():
         try:
             # 从 prompt_manager 获取安全检查提示词
+            logger.info("执行内容安全检查.")
             security_prompt = get_prompt("security_check_prompt")
             security_check_messages = [
                 {"role": "system", "content": security_prompt},
@@ -56,19 +60,22 @@ def invoke_llm(
             security_result = security_response.choices[0].message.content.strip().lower()
 
             if "unsafe" in security_result:
-                print(f"内容安全检查失败，模型返回: {security_result}")
+                logger.warning(f"内容安全检查失败，模型返回: {security_result}")
                 raise ValueError("输入内容被判定为不安全，已拒绝处理。")
+            else:
+                logger.info("内容安全检查通过.")
 
         except FileNotFoundError:
             # 如果提示文件不存在，可以选择是抛出异常还是记录警告后继续
-            print("警告: 未找到 'security_check_prompt.txt'，跳过内容安全检查。")
+            logger.warning("警告: 未找到 'security_check_prompt.txt'，跳过内容安全检查。")
         except APIError as e:
-            print(f"内容安全检查过程中调用模型失败: {e}")
+            logger.error(f"内容安全检查过程中调用模型失败: {e}")
             raise e
 
     # 如果启用了增强结构化输出
     if enhanced_structured_output and formatting_prompt:
         # 1. 第一次调用，非流式，获取完整输出
+        logger.info(f"开始增强模式第一次LLM调用. Model: {model}, Temp: {temperature}")
         try:
             initial_response = client.chat.completions.create(
                 model=model,
@@ -78,9 +85,10 @@ def invoke_llm(
                 max_tokens=max_tokens,
             )
             first_call_output = initial_response.choices[0].message.content
+            logger.info(f"增强模式第一次LLM调用成功. Output length: {len(first_call_output)}")
         except APIError as e:
             # 如果第一次调用失败，直接抛出异常
-            print(f"增强模式下，第一次调用模型失败: {e}")
+            logger.error(f"增强模式下，第一次调用模型失败: {e}")
             raise e
 
         # 2. 第二次调用，使用格式化提示词，流式返回
@@ -101,6 +109,7 @@ def invoke_llm(
         ]
         
         # 返回第二次调用的流
+        logger.info("开始增强模式第二次LLM调用 (流式格式化).")
         return client.chat.completions.create(
             model='Pro/Qwen/Qwen2.5-7B-Instruct',
             messages=reformat_messages,
@@ -110,6 +119,7 @@ def invoke_llm(
         )
 
     # 原始逻辑：如果未启用增强模式
+    logger.info(f"开始标准LLM调用. Model: {model}, Stream: {stream}, Temp: {temperature}")
     return client.chat.completions.create(
         model=model,
         messages=messages,
@@ -126,7 +136,7 @@ if __name__ == "__main__":
         raise ValueError("请设置 SILICONFLOW_API_KEY 环境变量")
 
     # ----- 非流式调用示例 -----
-    print("----- 非流式调用 -----")
+    logger.info("----- 非流式调用 -----")
     non_stream_messages = [
         {"role": "user", "content": "你好，请介绍一下你自己。"}
     ]
@@ -136,10 +146,10 @@ if __name__ == "__main__":
         messages=non_stream_messages,
         stream=False,
     )
-    print(non_stream_response)
+    logger.info(non_stream_response)
 
     # ----- 流式调用示例 -----
-    print("\n----- 流式调用 -----")
+    logger.info("\n----- 流式调用 -----")
     stream_messages = [
         {"role": "user", "content": "推理模型会给市场带来哪些新的机会"}
     ]
@@ -150,5 +160,4 @@ if __name__ == "__main__":
         stream=True,
     )
     for chunk in stream_response:
-        print(chunk, end="", flush=True)
-    print() 
+        logger.info(chunk) 

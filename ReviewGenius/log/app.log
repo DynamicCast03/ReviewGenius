@@ -1,0 +1,87 @@
+2025-06-25 11:16:51,934 - werkzeug - INFO -  * Restarting with stat
+2025-06-25 11:16:52,538 - werkzeug - WARNING -  * Debugger is active!
+2025-06-25 11:16:52,546 - werkzeug - INFO -  * Debugger PIN: 420-448-176
+2025-06-25 11:16:54,342 - app - INFO - Client connected
+2025-06-25 11:17:01,325 - app - INFO - Client disconnected
+2025-06-25 11:17:01,444 - app - INFO - Client connected
+2025-06-25 11:17:55,029 - httpx - INFO - HTTP Request: POST https://api.siliconflow.cn/v1/chat/completions "HTTP/1.1 200 OK"
+2025-06-25 11:17:56,423 - httpx - INFO - HTTP Request: POST https://api.siliconflow.cn/v1/chat/completions "HTTP/1.1 200 OK"
+2025-06-25 11:19:31,304 - werkzeug - INFO -  * Detected change in '/Users/wangdu/Desktop/workspace/ReviewGenius/ReviewGenius/app.py', reloading
+2025-06-25 11:19:31,976 - werkzeug - INFO -  * Restarting with stat
+2025-06-25 11:19:32,838 - werkzeug - WARNING -  * Debugger is active!
+2025-06-25 11:19:32,845 - werkzeug - INFO -  * Debugger PIN: 420-448-176
+2025-06-25 11:19:33,334 - app - INFO - Client connected
+2025-06-25 11:19:51,576 - werkzeug - INFO -  * Detected change in '/Users/wangdu/Desktop/workspace/ReviewGenius/ReviewGenius/grading.py', reloading
+2025-06-25 11:19:52,217 - werkzeug - INFO -  * Restarting with stat
+2025-06-25 11:19:52,815 - werkzeug - WARNING -  * Debugger is active!
+2025-06-25 11:19:52,822 - werkzeug - INFO -  * Debugger PIN: 420-448-176
+2025-06-25 11:19:53,818 - app - INFO - Client connected
+2025-06-25 11:20:09,482 - werkzeug - INFO -  * Detected change in '/Users/wangdu/Desktop/workspace/ReviewGenius/ReviewGenius/user_profile_manager.py', reloading
+2025-06-25 11:20:10,126 - werkzeug - INFO -  * Restarting with stat
+2025-06-25 11:20:10,731 - werkzeug - WARNING -  * Debugger is active!
+2025-06-25 11:20:10,739 - werkzeug - INFO -  * Debugger PIN: 420-448-176
+2025-06-25 11:20:12,193 - app - INFO - Client connected
+2025-06-25 11:20:31,588 - werkzeug - INFO -  * Detected change in '/Users/wangdu/Desktop/workspace/ReviewGenius/ReviewGenius/siliconflow_client.py', reloading
+2025-06-25 11:20:32,223 - werkzeug - INFO -  * Restarting with stat
+2025-06-25 11:20:32,817 - werkzeug - WARNING -  * Debugger is active!
+2025-06-25 11:20:32,823 - werkzeug - INFO -  * Debugger PIN: 420-448-176
+2025-06-25 11:20:33,134 - app - INFO - Client connected
+2025-06-25 11:20:38,229 - werkzeug - INFO -  * Detected change in '/Users/wangdu/Desktop/workspace/ReviewGenius/ReviewGenius/app.py', reloading
+2025-06-25 11:20:38,888 - werkzeug - INFO -  * Restarting with stat
+2025-06-25 11:20:39,515 - werkzeug - WARNING -  * Debugger is active!
+2025-06-25 11:20:39,522 - werkzeug - INFO -  * Debugger PIN: 420-448-176
+2025-06-25 11:20:39,924 - app - INFO - Client connected
+2025-06-25 11:20:43,361 - werkzeug - INFO -  * Restarting with stat
+2025-06-25 11:20:44,048 - werkzeug - WARNING -  * Debugger is active!
+2025-06-25 11:20:44,055 - werkzeug - INFO -  * Debugger PIN: 420-448-176
+2025-06-25 11:20:47,226 - app - INFO - Client connected
+2025-06-25 11:20:55,752 - werkzeug - INFO -  * Restarting with stat
+2025-06-25 11:20:56,335 - werkzeug - WARNING -  * Debugger is active!
+2025-06-25 11:20:56,341 - werkzeug - INFO -  * Debugger PIN: 420-448-176
+2025-06-25 11:20:58,015 - app - INFO - Client connected
+2025-06-25 11:21:00,516 - app - INFO - 开始生成试卷. 文件: ['2025年春军理教学计划.pdf'], 要求: 简答题1道(每题10分)
+2025-06-25 11:21:00,649 - app - INFO - 所有文件内容已聚合，总长度: 3084
+2025-06-25 11:21:00,652 - app - INFO - 返回试卷生成流.
+2025-06-25 11:21:00,684 - siliconflow_client - INFO - 执行内容安全检查.
+2025-06-25 11:21:02,103 - httpx - INFO - HTTP Request: POST https://api.siliconflow.cn/v1/chat/completions "HTTP/1.1 200 OK"
+2025-06-25 11:21:02,106 - siliconflow_client - INFO - 内容安全检查通过.
+2025-06-25 11:21:02,106 - siliconflow_client - INFO - 开始标准LLM调用. Model: Qwen/Qwen2.5-72B-Instruct, Stream: True, Temp: 0.6
+2025-06-25 11:21:03,362 - httpx - INFO - HTTP Request: POST https://api.siliconflow.cn/v1/chat/completions "HTTP/1.1 200 OK"
+2025-06-25 11:21:22,026 - app - INFO - 开始批改试卷. 题目数: 1
+2025-06-25 11:21:22,026 - app - INFO - 返回批改结果流.
+2025-06-25 11:21:22,027 - grading - INFO - 开始批改第 1 题, 类型: short_answer
+2025-06-25 11:21:22,027 - grading - INFO - 第 1 题 (short_answer) 使用LLM判分.
+2025-06-25 11:21:22,074 - siliconflow_client - INFO - 执行内容安全检查.
+2025-06-25 11:21:22,812 - httpx - INFO - HTTP Request: POST https://api.siliconflow.cn/v1/chat/completions "HTTP/1.1 200 OK"
+2025-06-25 11:21:22,813 - siliconflow_client - INFO - 内容安全检查通过.
+2025-06-25 11:21:22,813 - siliconflow_client - INFO - 开始标准LLM调用. Model: Qwen/Qwen2.5-72B-Instruct, Stream: True, Temp: 0.6
+2025-06-25 11:21:23,300 - httpx - INFO - HTTP Request: POST https://api.siliconflow.cn/v1/chat/completions "HTTP/1.1 200 OK"
+2025-06-25 11:21:30,550 - app - INFO - 批改完成，启动后台任务更新用户画像.
+2025-06-25 11:21:30,551 - app - INFO - 后台任务：开始更新用户画像。
+2025-06-25 11:21:30,604 - siliconflow_client - INFO - 执行内容安全检查.
+2025-06-25 11:21:31,186 - httpx - INFO - HTTP Request: POST https://api.siliconflow.cn/v1/chat/completions "HTTP/1.1 200 OK"
+2025-06-25 11:21:31,187 - siliconflow_client - INFO - 内容安全检查通过.
+2025-06-25 11:21:31,187 - siliconflow_client - INFO - 开始标准LLM调用. Model: Qwen/Qwen2.5-72B-Instruct, Stream: False, Temp: 0.6
+2025-06-25 11:21:55,710 - httpx - INFO - HTTP Request: POST https://api.siliconflow.cn/v1/chat/completions "HTTP/1.1 200 OK"
+2025-06-25 11:21:55,713 - app - INFO - 后台任务：生成答题总结完成，长度: 477
+2025-06-25 11:21:55,713 - app - INFO - 生成的答题总结: 本次考试中，学生在军事理论课的主要课程目标这一简答题上未能给出任何有效回答，表明其对军事理论课程的基本目标和内容完全不熟悉，存在明显的知识盲区。从答题情况来看，学生不仅未能展现对军事基础知识的了解，也未能体现出国防观念、国家安全意识等重要理念的认识。这反映出学生在相关知识点上的掌握极为薄弱，未能达到课程的基本要求。在能力方面，学生未能对问题进行基本的理解和回答，说明其在分析、归纳和应用能力上存在明显不足。得分模式显示，学生在简答题这种需要综合运用知识的题型上表现尤为薄弱。
+
+总体评价：本次答题表现不佳，未能达到课程的基本要求，需重点关注军事理论课程的基本知识点和核心理念的学习与理解。
+
+亮点分析：本次答题未展现明显亮点。
+
+问题诊断：核心问题在于对军事理论课程基本目标和内容的完全不了解，导致无法进行有效回答，反映出知识盲区和应用能力的不足。
+
+改进建议：建议学生加强对军事理论课程的基本概念和目标的学习，可以通过阅读教材、参加相关讲座或讨论，提高对国防观念和国家安全意识的理解。同时，练习简答题的答题技巧，学会如何组织答案，清晰表达自己的观点。
+2025-06-25 11:21:55,714 - user_profile_manager - INFO - 读取用户画像. 长度: 175
+2025-06-25 11:21:55,714 - user_profile_manager - INFO - 开始使用LLM更新用户画像.
+2025-06-25 11:21:55,769 - siliconflow_client - INFO - 执行内容安全检查.
+2025-06-25 11:21:56,739 - httpx - INFO - HTTP Request: POST https://api.siliconflow.cn/v1/chat/completions "HTTP/1.1 200 OK"
+2025-06-25 11:21:56,739 - siliconflow_client - INFO - 内容安全检查通过.
+2025-06-25 11:21:56,740 - siliconflow_client - INFO - 开始标准LLM调用. Model: Qwen/Qwen2.5-72B-Instruct, Stream: False, Temp: 0.5
+2025-06-25 11:22:01,817 - httpx - INFO - HTTP Request: POST https://api.siliconflow.cn/v1/chat/completions "HTTP/1.1 200 OK"
+2025-06-25 11:22:01,818 - user_profile_manager - INFO - 用户画像已保存. 新长度: 200
+2025-06-25 11:22:01,818 - user_profile_manager - INFO - LLM更新用户画像成功. 新长度: 200
+2025-06-25 11:22:01,818 - app - INFO - 用户画像已成功更新: 该生在军事基础知识和忧患危机意识等核心概念的理解上表现出一定的扎实基础，能够准确回答选择题和填空题。然而，最近一次考试中，其在简答题部分的表现显著下降，尤其在军事理论课程的目标和内容方面存在明显的知识盲区，未能达到课程的基本要求。学生在分析、归纳和应用能力上存在明显不足，特别是在综合运用知识回答问题时表现尤为薄弱。建议继续巩固基础知识，同时加强逻辑思维训练和表达能力的提升，尤其是简答题的答题技巧。
+2025-06-25 11:22:01,838 - app - INFO - Client disconnected
+2025-06-25 11:22:01,848 - app - INFO - Client connected

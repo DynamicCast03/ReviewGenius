@@ -1,5 +1,8 @@
 import os
 from jinja2 import Template
+import logging
+
+logger = logging.getLogger(__name__)
 
 def get_prompt(prompt_name: str, is_template=False, **kwargs) -> str:
     """
@@ -48,10 +51,10 @@ if __name__ == "__main__":
             question_types=question_types_str,
         )
 
-        print("----- 格式化后的提示词 -----")
-        print(formatted_prompt)
+        logger.info("----- 格式化后的提示词 -----")
+        logger.info(formatted_prompt)
 
     except FileNotFoundError as e:
-        print(e)
+        logger.error(e)
     except Exception as e:
-        print(f"发生错误: {e}") 
+        logger.error(f"发生错误: {e}") 

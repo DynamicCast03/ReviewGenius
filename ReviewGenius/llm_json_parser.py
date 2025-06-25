@@ -1,5 +1,8 @@
 import json
 from typing import Generator, Dict, Any
+import logging
+
+logger = logging.getLogger(__name__)
 
 def stream_json_with_events(text_stream: Generator[str, None, None]) -> Generator[Dict[str, Any], None, None]:
     """
@@ -33,7 +36,7 @@ def stream_json_with_events(text_stream: Generator[str, None, None]) -> Generato
             if chunk is None:
                 continue
 
-            print(chunk, end="") # Server-side debug print
+            logger.debug(chunk) # Server-side debug print
             buffer += chunk
         except StopIteration:
             # Stream ended

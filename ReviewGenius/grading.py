@@ -3,7 +3,9 @@ from openai import AuthenticationError
 import prompt_manager
 import siliconflow_client
 from llm_json_parser import stream_json_with_events
+import logging
 
+logger = logging.getLogger(__name__)
 
 def _get_grading_prompt(question, user_answer, is_correct=None):
     """
@@ -37,6 +39,7 @@ def grade_exam_stream(questions, user_answers, api_key, temperature=0.7, enhance
         
     for i, (question, user_answer) in enumerate(zip(questions, user_answers)):
         q_type = question.get("question_type")
+        logger.info(f"开始批改第 {i+1} 题, 类型: {q_type}")
 
         # 为每道题的开始发送一个事件
         yield json.dumps({"type": "start", "question_index": i}) + "\n"
@@ -47,6 +50,7 @@ def grade_exam_stream(questions, user_answers, api_key, temperature=0.7, enhance
                 correct_answer = question.get("answer")
                 is_correct = user_answer == correct_answer
                 score = question.get("score", 0) if is_correct else 0
+                logger.info(f"第 {i+1} 题 (选择题) 本地判分完成. 正确答案: {correct_answer}, 用户答案: {user_answer}, 得分: {score}")
                 
                 prompt = _get_grading_prompt(question, user_answer, is_correct)
                 messages = [{"role": "user", "content": prompt}]
@@ -71,6 +75,7 @@ def grade_exam_stream(questions, user_answers, api_key, temperature=0.7, enhance
                     yield json.dumps(event) + "\n"
 
             elif q_type in ["fill_in_the_blank", "short_answer"]:
+                logger.info(f"第 {i+1} 题 ({q_type}) 使用LLM判分.")
                 prompt = _get_grading_prompt(question, user_answer)
                 messages = [{"role": "user", "content": prompt}]
 
@@ -93,6 +98,7 @@ def grade_exam_stream(questions, user_answers, api_key, temperature=0.7, enhance
                     yield json.dumps(event) + "\n"
 
             else:
+                logger.warning(f"第 {i+1} 题是未知题型 ({q_type})，无法批改.")
                 # 处理未知题型
                 error_data = {"score": 0, "feedback": "未知题型，无法批改。"}
                 yield json.dumps(

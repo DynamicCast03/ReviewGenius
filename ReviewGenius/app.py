@@ -1,5 +1,7 @@
 import os
 import json
+import logging
+from logging.handlers import RotatingFileHandler
 import pdfplumber # 导入 pdfplumber
 import pptx # 导入 pptx
 from flask import (
@@ -21,6 +23,28 @@ import grading # 导入评分模块
 import markdown_exporter # 导入导出模块
 import user_profile_manager
 import threading
+
+def setup_logging():
+    log_dir = 'log'
+    if not os.path.exists(log_dir):
+        os.makedirs(log_dir)
+    
+    log_file = os.path.join(log_dir, 'app.log')
+    
+    # 配置日志记录
+    handler = RotatingFileHandler(log_file, maxBytes=10*1024*1024, backupCount=5, encoding='utf-8')
+    stream_handler = logging.StreamHandler()
+    
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    handler.setFormatter(formatter)
+    stream_handler.setFormatter(formatter)
+    
+    logger = logging.getLogger()
+    logger.setLevel(logging.INFO)
+    logger.addHandler(handler)
+    logger.addHandler(stream_handler)
+
+setup_logging()
 
 app = Flask(__name__)
 # 添加CORS和SocketIO
@@ -212,6 +236,8 @@ def generate_exam():
         if not question_types_str:
             return jsonify({"error": "至少需要设置一种题型"}), 400
 
+        app.logger.info(f"开始生成试卷. 文件: {uploaded_filenames}, 要求: {question_types_str}")
+
         document_contents = []
         # 更改: 循环读取文件夹中的文件
         for filename in uploaded_filenames:
@@ -239,6 +265,7 @@ def generate_exam():
 
             document_contents.append(f"--- 来自文件: {filename} ---\n{content}")
         document_content = "\n\n".join(document_contents)
+        app.logger.info(f"所有文件内容已聚合，总长度: {len(document_content)}")
 
         scores_data = {
             "multiple_choice": question_settings["选择题"]["score"],
@@ -294,7 +321,7 @@ def generate_exam():
                             event["data"] = question_obj.to_dict()
                         except (ValueError, KeyError) as e:
                             # 如果数据格式错误，可以跳过或发送一个错误事件
-                            print(f"Skipping invalid question object: {e}, data: {event['data']}")
+                            app.logger.warning(f"Skipping invalid question object: {e}, data: {event['data']}")
                             continue # 不发送这个 'end' 事件
                     
                     yield json.dumps(event) + "\n"
@@ -312,11 +339,12 @@ def generate_exam():
                 # 捕获其他流式过程中的错误
                 yield json.dumps({"type": "error", "error": f"生成过程中发生错误: {str(e)}", "error_type": "generation"}) + "\n"
 
+        app.logger.info("返回试卷生成流.")
         return Response(generate_question_stream(), mimetype="application/x-ndjson")
 
     except Exception as e:
         error_msg = f"处理时出错: {str(e)}"
-        print(error_msg)
+        app.logger.error(error_msg)
         return jsonify({"error": error_msg}), 500
 
 @app.route("/api/regenerate_question", methods=["POST"])
@@ -328,6 +356,8 @@ def regenerate_question():
         user_requirement = data.get("user_requirement", "无特定要求")
         api_key = data.get("api_key")
         
+        app.logger.info(f"开始题目再生成. Action: {action}, Q_Type: {original_question.get('question_type')}")
+
         if not all([original_question, action, api_key]):
             return jsonify({"error": "缺少原始题目、操作类型或API Key"}), 400
 
@@ -358,6 +388,7 @@ def regenerate_question():
             document_contents.append(f"--- 来自文件: {filename} ---\n{content}")
         
         document_content = "\n\n".join(document_contents)
+        app.logger.info(f"题目再生成 - 文件内容已聚合，总长度: {len(document_content)}")
 
         # 确定使用哪个提示
         prompt_map = {
@@ -410,7 +441,7 @@ def regenerate_question():
                             question_obj.score = original_question.get('score', 5)
                             event["data"] = question_obj.to_dict()
                         except (ValueError, KeyError) as e:
-                            print(f"Skipping invalid regenerated question object: {e}, data: {event['data']}")
+                            app.logger.warning(f"Skipping invalid regenerated question object: {e}, data: {event['data']}")
                             continue
                     yield json.dumps(event) + "\n"
 
@@ -421,11 +452,12 @@ def regenerate_question():
             except Exception as e:
                 yield json.dumps({"type": "error", "error": f"生成过程中发生错误: {str(e)}", "error_type": "generation"}) + "\n"
 
+        app.logger.info("返回题目再生成流.")
         return Response(generate_stream(), mimetype="application/x-ndjson")
 
     except Exception as e:
         error_msg = f"处理时出错: {str(e)}"
-        print(error_msg)
+        app.logger.error(error_msg)
         return jsonify({"error": error_msg}), 500
 
 @app.route("/api/export/markdown", methods=["POST"])
@@ -444,13 +476,14 @@ def export_markdown():
 
     except Exception as e:
         error_msg = f"导出Markdown时出错: {str(e)}"
-        print(error_msg)
+        app.logger.error(error_msg)
         return jsonify({"error": error_msg}), 500
 
 def _update_profile_task(api_key, questions, user_answers):
     """在后台线程中生成答题总结并更新用户画像。"""
     # 使用 app_context 确保可以访问应用配置等
     with app.app_context():
+        app.logger.info("后台任务：开始更新用户画像。")
         try:
             # 1. 准备生成总结的Prompt
             summary_prompt = prompt_manager.get_prompt(
@@ -468,22 +501,23 @@ def _update_profile_task(api_key, questions, user_answers):
                 temperature=0.6 # 使用中等温度以获得有洞察力的分析
             )
             grading_summary = llm_response.choices[0].message.content.strip()
+            app.logger.info(f"后台任务：生成答题总结完成，长度: {len(grading_summary)}")
 
             if not grading_summary:
-                print("LLM返回了空的答题总结，跳过用户画像更新。")
+                app.logger.info("LLM返回了空的答题总结，跳过用户画像更新。")
                 return
 
             # 3. 使用总结更新用户画像
-            print(f"生成的答题总结: {grading_summary}")
+            app.logger.info(f"生成的答题总结: {grading_summary}")
             updated_profile = user_profile_manager.update_user_profile(grading_summary, api_key)
 
             if updated_profile:
-                print(f"用户画像已成功更新: {updated_profile}")
+                app.logger.info(f"用户画像已成功更新: {updated_profile}")
             else:
-                print("用户画像更新失败。")
+                app.logger.warning("用户画像更新失败。")
 
         except Exception as e:
-            print(f"后台更新用户画像任务失败: {e}")
+            app.logger.error(f"后台更新用户画像任务失败: {e}")
 
 @app.route("/api/grade", methods=["POST"])
 def grade_submission():
@@ -500,6 +534,8 @@ def grade_submission():
         if not all([questions, user_answers, api_key]):
             return jsonify({"error": "缺少题目、答案或API Key"}), 400
 
+        app.logger.info(f"开始批改试卷. 题目数: {len(questions)}")
+
         def generate_grade_stream():
             grading_results = []
             try:
@@ -512,6 +548,7 @@ def grade_submission():
                 
                 # 在流结束后，启动后台任务更新用户画像
                 # 确保grading_results不为空
+                app.logger.info("批改完成，启动后台任务更新用户画像.")
                 thread = threading.Thread(
                     target=_update_profile_task,
                     args=(api_key, questions, user_answers)
@@ -525,17 +562,18 @@ def grade_submission():
                 }
                 yield json.dumps(error_event) + "\n"
 
+        app.logger.info("返回批改结果流.")
         return Response(generate_grade_stream(), mimetype="application/x-ndjson")
 
     except Exception as e:
         error_msg = f"评分接口出错: {str(e)}"
-        print(error_msg)
+        app.logger.error(error_msg)
         return jsonify({"error": error_msg}), 500
 
 @socketio.on('connect')
 def handle_connect():
     """当客户端连接时，立即向其发送当前的文件列表"""
-    print('Client connected')
+    app.logger.info('Client connected')
     # 使用 with app.app_context() 来确保可以访问应用上下文
     with app.app_context():
         files = get_uploaded_files()
@@ -543,7 +581,7 @@ def handle_connect():
 
 @socketio.on('disconnect')
 def handle_disconnect():
-    print('Client disconnected')
+    app.logger.info('Client disconnected')
 
 if __name__ == "__main__":
     socketio.run(app, host="0.0.0.0", port=5000, debug=True)

@@ -2,6 +2,9 @@ import json
 import os
 import siliconflow_client
 import prompt_manager
+import logging
+
+logger = logging.getLogger(__name__)
 
 CONFIG_FILE = "config.json"
 
@@ -38,7 +41,9 @@ def save_config(config_data):
 def get_user_profile():
     """获取当前用户画像。"""
     config = load_config()
-    return config["user_profile"]
+    profile = config["user_profile"]
+    logger.info(f"读取用户画像. 长度: {len(profile)}")
+    return profile
 
 def set_user_profile(profile_text: str):
     """
@@ -47,6 +52,7 @@ def set_user_profile(profile_text: str):
     config = load_config()
     config["user_profile"] = profile_text
     save_config(config)
+    logger.info(f"用户画像已保存. 新长度: {len(profile_text)}")
 
 def update_user_profile(grading_summary: str, api_key: str):
     """
@@ -60,6 +66,7 @@ def update_user_profile(grading_summary: str, api_key: str):
         str: 更新后的用户画像文本，如果更新失败则返回None。
     """
     current_profile = get_user_profile()
+    logger.info("开始使用LLM更新用户画像.")
     
     update_prompt = prompt_manager.get_prompt(
         "update_user_profile_prompt",
@@ -84,14 +91,15 @@ def update_user_profile(grading_summary: str, api_key: str):
         updated_profile = response.choices[0].message.content.strip()
 
         if not updated_profile:
-            print("LLM返回了空的用户画像，更新操作已跳过。")
+            logger.warning("LLM返回了空的用户画像，更新操作已跳过。")
             return None
 
         # 将更新后的画像保存回配置文件
         set_user_profile(updated_profile)
         
+        logger.info(f"LLM更新用户画像成功. 新长度: {len(updated_profile)}")
         return updated_profile
 
     except Exception as e:
-        print(f"调用LLM更新用户画像时出错: {e}")
+        logger.error(f"调用LLM更新用户画像时出错: {e}")
         return None 
