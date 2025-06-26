@@ -191,38 +191,47 @@
 
 		<!-- Settings Modal -->
 		<div class="modal fade" id="settingsModal" tabindex="-1" aria-labelledby="settingsModalLabel" aria-hidden="true">
-			<div class="modal-dialog">
+			<div class="modal-dialog modal-lg modal-dialog-centered">
 				<div class="modal-content">
 					<div class="modal-header">
-						<h5 class="modal-title" id="settingsModalLabel">设置</h5>
+						<h5 class="modal-title" id="settingsModalLabel"><i class="bi bi-gear-wide-connected"></i> 高级设置</h5>
 						<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
 					</div>
 					<div class="modal-body">
-						<div class="form-group">
-							<label for="temperature-slider">模型温度 (Temperature): <span id="temperature-value">1.0</span></label>
-							<input type="range" class="custom-range" id="temperature-slider" min="0" max="2" step="0.1" value="1.0">
-							<small class="form-text text-muted">值越高，回答越随机和有创造性；值越低，回答越确定和保守。</small>
-						</div>
-						<div class="form-check">
-							<input class="form-check-input" type="checkbox" value="" id="enhanced-structured-output">
-							<label class="form-check-label" for="enhanced-structured-output">
-								增强型结构化输出 (实验性)
-							</label>
-							<small class="form-text text-muted">开启后，将会附加调用一次小模型对输出数据进行格式化检查，返回更
-								稳定的结构化数据。会导致流式输出首字出现前需要一定时间的等待。</small>
-						</div>
-						<!-- 用户画像功能开关 -->
-						<div class="form-check form-switch mt-3">
-							<input class="form-check-input" type="checkbox" id="user-profile-enabled">
-							<label class="form-check-label" for="user-profile-enabled">启用用户画像功能</label>
-							<small class="form-text text-muted d-block">启用后，系统将根据您的答题历史生成和使用用户画像，以提供更个性化的出题和评分。</small>
-						</div>
-						<!-- 用户画像编辑区 -->
-						<div class="form-group mt-3">
-							<label for="user-profile-editor">用户画像 (User Profile)</label>
-							<textarea class="form-control" id="user-profile-editor" rows="6"></textarea>
-							<small class="form-text text-muted">在这里查看和编辑您的学习画像。此画像将影响未来的出题和评分。</small>
-						</div>
+						<!-- 模型设置 -->
+						<fieldset class="mb-4 p-3 border rounded-3">
+							<legend class="fw-bold fs-6 w-auto px-2">🤖 模型设置</legend>
+							<div class="form-group mb-4">
+								<div class="d-flex justify-content-between align-items-center">
+									<label for="temperature-slider" class="form-label mb-0">模型温度 (Temperature)</label>
+									<span id="temperature-value" class="badge bg-primary rounded-pill">1.0</span>
+								</div>
+								<input type="range" class="form-range" id="temperature-slider" min="0" max="2" step="0.1" value="1.0">
+								<small class="form-text text-muted">值越高，回答越随机和有创造性；值越低，回答越确定和保守。</small>
+							</div>
+			
+							<div class="form-check form-switch">
+								<input class="form-check-input" type="checkbox" id="enhanced-structured-output">
+								<label class="form-check-label" for="enhanced-structured-output">
+									增强结构化输出
+								</label>
+								<small class="form-text text-muted d-block">开启后，将额外调用模型进行格式检查，返回更稳定的JSON数据。这可能会增加首个token的等待时间。</small>
+							</div>
+						</fieldset>
+			
+						<!-- 用户画像 -->
+						<fieldset class="mb-3 p-3 border rounded-3">
+							<legend class="fw-bold fs-6 w-auto px-2">👤 个性化</legend>
+							<div class="form-check form-switch mb-3">
+								<input class="form-check-input" type="checkbox" id="user-profile-enabled">
+								<label class="form-check-label" for="user-profile-enabled">启用用户画像功能</label>								<small class="form-text text-muted d-block">启用后，系统将根据您的答题历史生成和使用用户画像，以提供更个性化的出题和评分。</small>
+							</div>
+							<div class="form-group">
+								<label for="user-profile-editor" class="form-label">用户画像内容</label>
+								<textarea class="form-control" id="user-profile-editor" rows="6" placeholder="用户画像将在这里显示和编辑..."></textarea>
+								<small class="form-text text-muted">此画像将影响未来的出题和评分。</small>
+							</div>
+						</fieldset>
 					</div>
 					<div class="modal-footer">
 						<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>

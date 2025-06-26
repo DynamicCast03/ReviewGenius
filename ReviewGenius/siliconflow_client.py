@@ -3,8 +3,34 @@ from openai import OpenAI, APIError
 from typing import List, Dict, Generator, Union
 from prompt_manager import get_prompt
 import logging
+import time
 
 logger = logging.getLogger(__name__)
+
+def _call_llm_with_retry(
+    client: OpenAI,
+    retries: int = 3,
+    **kwargs,
+):
+    """
+    通过重试机制调用OpenAI聊天补全API。
+
+    :param client: OpenAI客户端实例。
+    :param retries: 重试次数。
+    :param kwargs: 传递给 client.chat.completions.create 的参数。
+    :return: API调用结果。
+    """
+    last_exception = None
+    for attempt in range(retries):
+        try:
+            return client.chat.completions.create(**kwargs)
+        except APIError as e:
+            logger.warning(f"LLM API调用失败 (尝试 {attempt + 1}/{retries}): {e}。1秒后重试...")
+            last_exception = e
+            time.sleep(1)
+    logger.error(f"LLM API在 {retries} 次尝试后仍然失败。")
+    raise last_exception
+
 
 def invoke_llm(
     api_key: str,
@@ -50,7 +76,8 @@ def invoke_llm(
                 {"role": "user", "content": f"请审查以下内容：\n\n---\n{user_content}\n---"}
             ]
 
-            security_response = client.chat.completions.create(
+            security_response = _call_llm_with_retry(
+                client,
                 model=model,
                 messages=security_check_messages,
                 stream=False,
@@ -77,7 +104,8 @@ def invoke_llm(
         # 1. 第一次调用，非流式，获取完整输出
         logger.info(f"开始增强模式第一次LLM调用. Model: {model}, Temp: {temperature}")
         try:
-            initial_response = client.chat.completions.create(
+            initial_response = _call_llm_with_retry(
+                client,
                 model=model,
                 messages=messages,
                 stream=False, # 强制非流式
@@ -110,17 +138,19 @@ def invoke_llm(
         
         # 返回第二次调用的流
         logger.info("开始增强模式第二次LLM调用 (流式格式化).")
-        return client.chat.completions.create(
+        return _call_llm_with_retry(
+            client,
             model='Pro/Qwen/Qwen2.5-7B-Instruct',
             messages=reformat_messages,
-            stream=True, # 强制流式
-            temperature=0.0, # 为了格式化，使用更低的温度
+            stream=stream,
+            temperature=0.0,
             max_tokens=max_tokens,
         )
 
     # 原始逻辑：如果未启用增强模式
     logger.info(f"开始标准LLM调用. Model: {model}, Stream: {stream}, Temp: {temperature}")
-    return client.chat.completions.create(
+    return _call_llm_with_retry(
+        client,
         model=model,
         messages=messages,
         stream=stream,

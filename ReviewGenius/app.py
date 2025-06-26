@@ -2,8 +2,8 @@ import os
 import json
 import logging
 from logging.handlers import RotatingFileHandler
-import pdfplumber # 导入 pdfplumber
-import pptx # 导入 pptx
+import pdfplumber 
+import pptx 
 from flask import (
     Flask,
     request,
@@ -13,14 +13,14 @@ from flask import (
 )
 from flask_socketio import SocketIO, emit
 from openai import AuthenticationError
-# from werkzeug.utils import secure_filename
+
 from filter import sanitizer
 import prompt_manager
 import siliconflow_client
 from llm_json_parser import stream_json_with_events
-from question_types import Question # Import base class for validation
-import grading # 导入评分模块
-import markdown_exporter # 导入导出模块
+from question_types import Question 
+import grading 
+import markdown_exporter 
 import user_profile_manager
 import threading
 
@@ -31,7 +31,6 @@ def setup_logging():
     
     log_file = os.path.join(log_dir, 'app.log')
     
-    # 配置日志记录
     handler = RotatingFileHandler(log_file, maxBytes=10*1024*1024, backupCount=5, encoding='utf-8')
     stream_handler = logging.StreamHandler()
     
@@ -47,19 +46,17 @@ def setup_logging():
 setup_logging()
 
 app = Flask(__name__)
-# 添加CORS和SocketIO
 socketio = SocketIO(app, cors_allowed_origins="*")
 
 UPLOAD_FOLDER = "uploads"
 CONFIG_FILE = "config.json"
 app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024
-app.config["UPLOAD_EXTENSIONS"] = [".txt", ".pdf", ".pptx", ".ppt"]  # 支持txt, pdf, pptx, ppt
+app.config["UPLOAD_EXTENSIONS"] = [".txt", ".pdf", ".pptx", ".ppt"]  
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 def get_uploaded_files():
     """获取上传目录中的文件列表，忽略隐藏文件。"""
     try:
-        # Ignore hidden files like .DS_Store
         return [f for f in os.listdir(UPLOAD_FOLDER) if os.path.isfile(os.path.join(UPLOAD_FOLDER, f)) and not f.startswith('.')]
     except Exception:
         return []
@@ -73,6 +70,7 @@ def broadcast_file_list():
 def load_config():
     default_profile = "该用户暂无画像，请根据本次答题情况生成一份初始画像。"
     if not os.path.exists(CONFIG_FILE):
+        app.logger.info(f"配置文件不存在，创建默认配置文件: {CONFIG_FILE}")
         default_config = {
             "temperature": 1.0,
             "enhanced_structured_output": False,
@@ -83,15 +81,16 @@ def load_config():
             json.dump(default_config, f, indent=4, ensure_ascii=False)
         return default_config
     try:
+        app.logger.info(f"加载配置文件: {CONFIG_FILE}")
         with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
             config = json.load(f)
-            # 确保旧配置文件也能兼容
             if "user_profile" not in config:
                 config["user_profile"] = default_profile
             if "user_profile_enabled" not in config:
                 config["user_profile_enabled"] = True
             return config
     except (json.JSONDecodeError, FileNotFoundError):
+        app.logger.error(f"加载配置文件失败: {CONFIG_FILE}")
         return {
             "temperature": 1.0,
             "enhanced_structured_output": False,
@@ -100,6 +99,7 @@ def load_config():
         }
 
 def save_config(config_data):
+    app.logger.info(f"保存配置文件: {CONFIG_FILE}")
     with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
         json.dump(config_data, f, indent=4, ensure_ascii=False)
 
@@ -111,15 +111,16 @@ def index():
 @app.route("/api/settings", methods=["GET", "POST"])
 def manage_settings():
     if request.method == "GET":
+        app.logger.info(f"获取配置文件: {CONFIG_FILE}")
         return jsonify(load_config())
     
     if request.method == "POST":
+        app.logger.info(f"更新配置文件: {CONFIG_FILE}")
         data = request.json
         config = load_config()
         config["temperature"] = float(data.get("temperature", config["temperature"]))
         config["enhanced_structured_output"] = bool(data.get("enhanced_structured_output", config["enhanced_structured_output"]))
         config["user_profile_enabled"] = bool(data.get("user_profile_enabled", config.get("user_profile_enabled", True)))
-        # 添加对 user_profile 的处理
         if "user_profile" in data:
             config["user_profile"] = str(data.get("user_profile", ""))
         
@@ -128,6 +129,7 @@ def manage_settings():
 
 @app.route("/api/upload", methods=["POST"])
 def upload_file():
+    app.logger.info(f"上传文件: {UPLOAD_FOLDER}")
     if 'files' not in request.files:
         return jsonify({"error": "没有文件部分"}), 400
     
@@ -140,7 +142,6 @@ def upload_file():
     errors = {}
     success_files = []
     for file in uploaded_files:
-        # filename = secure_filename(file.filename)
         filename = file.filename
         file_ext = os.path.splitext(filename)[1].lower()
         if file_ext not in app.config["UPLOAD_EXTENSIONS"]:
@@ -157,7 +158,6 @@ def upload_file():
         broadcast_file_list()
         return jsonify({"message": "文件上传成功"}), 200
 
-    # 如果有错误，也广播列表以反映部分成功的上传
     broadcast_file_list()
     response = {"message": "部分或全部文件上传失败", "errors": errors, "success_files": success_files}
     return jsonify(response), 400 if len(success_files) == 0 else 207
@@ -167,7 +167,6 @@ def list_files():
     try:
         files = get_uploaded_files()
         response = jsonify(files)
-        # 防止浏览器缓存文件列表
         response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
         response.headers['Pragma'] = 'no-cache'
         response.headers['Expires'] = '0'
@@ -177,9 +176,6 @@ def list_files():
 
 @app.route("/api/files/<filename>", methods=["DELETE"])
 def delete_file_route(filename):
-    # werkzeug.utils.secure_filename() is used to secure the filename before saving it.
-    # We should use the same function to secure the filename before deleting it.
-    # filename = secure_filename(filename)
     file_path = os.path.join(UPLOAD_FOLDER, filename)
     
     if not os.path.exists(file_path):
@@ -187,14 +183,14 @@ def delete_file_route(filename):
         
     try:
         os.remove(file_path)
-        broadcast_file_list() # 广播更新后的文件列表
+        broadcast_file_list()
         return jsonify({"message": f"文件 '{filename}' 已删除"}), 200
     except Exception as e:
         return jsonify({"error": f"删除文件失败: {str(e)}"}), 500
 
 @app.route("/api/process", methods=["POST"])
 def generate_exam():
-    # 更改: 不再从请求中获取文件，而是扫描上传文件夹
+    app.logger.info(f"开始生成试卷.")
     uploaded_filenames = [f for f in os.listdir(UPLOAD_FOLDER) if os.path.isfile(os.path.join(UPLOAD_FOLDER, f)) and not f.startswith('.')]
 
     if not uploaded_filenames:
@@ -216,7 +212,6 @@ def generate_exam():
         if not api_key:
             return jsonify({"error": "API Key缺失"}), 400
 
-        # 合并简答题和计算题
         short_answer_count = int(request.form.get("short_count", "0")) + int(
             request.form.get("calc_count", "0")
         )
@@ -249,7 +244,6 @@ def generate_exam():
         app.logger.info(f"开始生成试卷. 文件: {uploaded_filenames}, 要求: {question_types_str}")
 
         document_contents = []
-        # 更改: 循环读取文件夹中的文件
         for filename in uploaded_filenames:
             file_path = os.path.join(UPLOAD_FOLDER, filename)
             file_ext = os.path.splitext(filename)[1].lower()
@@ -267,7 +261,7 @@ def generate_exam():
                             if hasattr(shape, "text"):
                                 all_text.append(shape.text)
                     content = "\n".join(all_text)
-                else: # 默认为txt
+                else:
                     with open(file_path, 'r', encoding='utf-8') as f:
                         content = f.read()
             except Exception as e:
@@ -283,10 +277,8 @@ def generate_exam():
             "short_answer": question_settings["简答题"]["score"],
         }
 
-        # 1. 加载静态的格式化提示词
         formatting_instructions = prompt_manager.get_prompt("exam_generation_prompt_formatting")
 
-        # 2. 渲染主提示词，注入所有动态内容和静态格式说明
         main_prompt = prompt_manager.get_prompt("exam_generation_prompt", document_content=document_content,
         user_requirement=user_text,
         question_types=question_types_str,
@@ -298,56 +290,46 @@ def generate_exam():
 
         def generate_question_stream():
             try:
-                # 检查是否启用增强模式
                 config = load_config()
                 enhanced_mode = config.get("enhanced_structured_output", False)
 
-                # 使用我们创建的客户端进行流式调用
                 llm_stream = siliconflow_client.invoke_llm(
                     api_key=api_key,
                     model="Qwen/Qwen2.5-72B-Instruct",
                     messages=messages,
-                    stream=not enhanced_mode, # 如果增强模式，第一次调用就不是流式
+                    stream=True,
                     temperature=temperature,
                     enhanced_structured_output=enhanced_mode,
                     formatting_prompt=formatting_instructions if enhanced_mode else None
                 )
                 
-                # 如果是增强模式，llm_stream已经是第二次调用的流，直接处理
                 if enhanced_mode:
                     event_stream = stream_json_with_events(llm_stream)
                     for event in event_stream:
                         yield json.dumps(event) + "\n"
                     return
 
-                # 原有逻辑，处理非增强模式下的流
                 event_stream = stream_json_with_events(llm_stream)
 
                 for event in event_stream:
                     if event["type"] == "end":
-                        # 在结束后验证数据结构
                         try:
                             question_obj = Question.from_dict(event["data"])
-                            # 将验证和转换后的数据放回事件中
                             event["data"] = question_obj.to_dict()
                         except (ValueError, KeyError) as e:
-                            # 如果数据格式错误，可以跳过或发送一个错误事件
                             app.logger.warning(f"Skipping invalid question object: {e}, data: {event['data']}")
-                            continue # 不发送这个 'end' 事件
+                            continue
                     
                     yield json.dumps(event) + "\n"
 
             except AuthenticationError:
                 yield json.dumps({"type": "error", "error": "API Key 无效或已过期，请检查您的输入。", "error_type": "authentication"}) + "\n"
             except ValueError as e:
-                # 捕获由内容安全检查抛出的ValueError
                 if "输入内容被判定为不安全" in str(e):
                     yield json.dumps({"type": "error", "error": str(e), "error_type": "security"}) + "\n"
                 else:
-                    # 重新抛出其他类型的ValueError
                     yield json.dumps({"type": "error", "error": f"生成过程中发生验证错误: {str(e)}", "error_type": "generation"}) + "\n"
             except Exception as e:
-                # 捕获其他流式过程中的错误
                 yield json.dumps({"type": "error", "error": f"生成过程中发生错误: {str(e)}", "error_type": "generation"}) + "\n"
 
         app.logger.info("返回试卷生成流.")
@@ -363,7 +345,7 @@ def regenerate_question():
     try:
         data = request.get_json()
         original_question = data.get("question")
-        action = data.get("action") # "regenerate", "increase_difficulty", "decrease_difficulty"
+        action = data.get("action") 
         user_requirement = data.get("user_requirement", "无特定要求")
         api_key = data.get("api_key")
         
@@ -372,7 +354,6 @@ def regenerate_question():
         if not all([original_question, action, api_key]):
             return jsonify({"error": "缺少原始题目、操作类型或API Key"}), 400
 
-        # 与主流程类似，读取所有上传文件作为上下文
         uploaded_filenames = get_uploaded_files()
         if not uploaded_filenames:
             return jsonify({"error": "找不到参考资料文件"}), 400
@@ -391,7 +372,7 @@ def regenerate_question():
                     pres = pptx.Presentation(file_path)
                     all_text = [s.text for slide in pres.slides for shape in slide.shapes if hasattr(shape, "text")]
                     content = "\n".join(all_text)
-                else: # 默认为txt
+                else:
                     with open(file_path, 'r', encoding='utf-8') as f:
                         content = f.read()
             except Exception as e:
@@ -401,7 +382,6 @@ def regenerate_question():
         document_content = "\n\n".join(document_contents)
         app.logger.info(f"题目再生成 - 文件内容已聚合，总长度: {len(document_content)}")
 
-        # 确定使用哪个提示
         prompt_map = {
             "regenerate": "regenerate_question_prompt",
             "increase_difficulty": "increase_difficulty_prompt",
@@ -411,7 +391,6 @@ def regenerate_question():
         if not prompt_name:
             return jsonify({"error": "无效的操作类型"}), 400
 
-        # 准备提示词参数
         config = load_config()
         temperature = config.get("temperature", 1.0)
         formatting_instructions = prompt_manager.get_prompt("exam_generation_prompt_formatting")
@@ -421,7 +400,7 @@ def regenerate_question():
             document_content=document_content,
             user_requirement=user_requirement,
             original_question=json.dumps(original_question, ensure_ascii=False, indent=2),
-            score=original_question.get('score', 5), # 使用原题的分数
+            score=original_question.get('score', 5), 
             formatting_instructions=formatting_instructions
         )
 
@@ -429,7 +408,6 @@ def regenerate_question():
 
         def generate_stream():
             try:
-                # 完全复用 siliconflow_client 和 stream_json_with_events 的逻辑
                 enhanced_mode = config.get("enhanced_structured_output", False)
                 llm_stream = siliconflow_client.invoke_llm(
                     api_key=api_key,
@@ -441,14 +419,11 @@ def regenerate_question():
                     formatting_prompt=formatting_instructions if enhanced_mode else None
                 )
 
-                # 使用事件流解析器
                 event_stream = stream_json_with_events(llm_stream)
                 for event in event_stream:
                     if event["type"] == "end":
-                        # 同样可以加入Question类的验证
                         try:
                             question_obj = Question.from_dict(event["data"])
-                            # 这里需要确保新生成题目的分数和原题一致
                             question_obj.score = original_question.get('score', 5)
                             event["data"] = question_obj.to_dict()
                         except (ValueError, KeyError) as e:
@@ -492,24 +467,23 @@ def export_markdown():
 
 def _update_profile_task(api_key, questions, user_answers):
     """在后台线程中生成答题总结并更新用户画像。"""
-    # 使用 app_context 确保可以访问应用配置等
     with app.app_context():
         app.logger.info("后台任务：开始更新用户画像。")
         try:
-            # 1. 准备生成总结的Prompt
+            
             summary_prompt = prompt_manager.get_prompt(
                 "grading_summary_prompt",
                 questions_with_answers=json.dumps(questions, ensure_ascii=False, indent=2),
                 user_answers=json.dumps(user_answers, ensure_ascii=False, indent=2),
             )
             
-            # 2. 调用LLM生成总结 (非流式)
+            
             llm_response = siliconflow_client.invoke_llm(
                 api_key=api_key,
                 model="Qwen/Qwen2.5-72B-Instruct",
                 messages=[{"role": "user", "content": summary_prompt}],
                 stream=False,
-                temperature=0.6 # 使用中等温度以获得有洞察力的分析
+                temperature=0.6 
             )
             grading_summary = llm_response.choices[0].message.content.strip()
             app.logger.info(f"后台任务：生成答题总结完成，长度: {len(grading_summary)}")
@@ -518,7 +492,7 @@ def _update_profile_task(api_key, questions, user_answers):
                 app.logger.info("LLM返回了空的答题总结，跳过用户画像更新。")
                 return
 
-            # 3. 使用总结更新用户画像
+            
             app.logger.info(f"生成的答题总结: {grading_summary}")
             updated_profile = user_profile_manager.update_user_profile(grading_summary, api_key)
 
@@ -555,9 +529,9 @@ def grade_submission():
                     enhanced_structured_output=enhanced_mode
                 )
                 for event_str in grading_stream:
-                    yield event_str + "\n" # 将原始事件字符串传递给前端
+                    yield event_str + "\n" 
                 
-                # 在流结束后，如果启用了用户画像功能，则启动后台任务更新
+                
                 config = load_config()
                 if config.get("user_profile_enabled", True):
                     app.logger.info("用户画像功能已启用，启动后台任务更新用户画像。")
@@ -588,7 +562,7 @@ def grade_submission():
 def handle_connect():
     """当客户端连接时，立即向其发送当前的文件列表"""
     app.logger.info('Client connected')
-    # 使用 with app.app_context() 来确保可以访问应用上下文
+    
     with app.app_context():
         files = get_uploaded_files()
         emit('file_list_update', {'files': files})
