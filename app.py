@@ -370,7 +370,7 @@ def regenerate_question():
                         content = "\n".join(all_text)
                 elif file_ext in [".pptx", ".ppt"]:
                     pres = pptx.Presentation(file_path)
-                    all_text = [s.text for slide in pres.slides for shape in slide.shapes if hasattr(shape, "text")]
+                    all_text = [shape.text for slide in pres.slides for shape in slide.shapes if hasattr(shape, "text")]
                     content = "\n".join(all_text)
                 else:
                     with open(file_path, 'r', encoding='utf-8') as f:
