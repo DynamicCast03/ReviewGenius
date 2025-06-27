@@ -413,7 +413,7 @@ def regenerate_question():
                     api_key=api_key,
                     model="Qwen/Qwen2.5-72B-Instruct",
                     messages=messages,
-                    stream=not enhanced_mode,
+                    stream=True,
                     temperature=temperature,
                     enhanced_structured_output=enhanced_mode,
                     formatting_prompt=formatting_instructions if enhanced_mode else None

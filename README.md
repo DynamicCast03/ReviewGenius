@@ -62,7 +62,6 @@ INFO:werkzeug:[31m[1mWARNING: This is a development server. Do not use it in a
  * Running on all addresses (0.0.0.0)
  * Running on http://127.0.0.1:5000
  * Running on http://<your-local-ip>:5000
-INFO:werkzeug:Press CTRL+C to quit
 ```
 
 ### 5. 使用方法
@@ -73,13 +72,3 @@ INFO:werkzeug:Press CTRL+C to quit
 4.  在 "题型设置" 部分，根据需要设置选择题、填空题、简答题的数量和分值。
 5.  点击 "开始生成试卷" 按钮，AI 将开始根据您的文档和要求出题。
 6.  生成完成后，您可以在页面上直接答题或将试卷导出为 Markdown 文件。
-
-## 配置文件
-
-应用首次启动或保存设置后，会在项目根目录创建一个 `config.json` 文件，用于保存您的偏好设置。
-
-- `temperature`: 控制 AI 模型输出的随机性，值越高，输出越具创造性；值越低，输出越稳定。
-- `user_profile`: 自动生成的用户画像文本。
-- `user_profile_enabled`: 是否启用用户画像功能。
-
-您可以直接修改此文件，也可以通过应用界面的 "高级设置" 进行更改。 
