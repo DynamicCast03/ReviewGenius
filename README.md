@@ -53,16 +53,7 @@ pip install -r requirements.txt
 python app.py
 ```
 
-服务启动后，您会看到类似以下的输出，表明应用正在 `5000` 端口上运行：
-
-```
- * Serving Flask app 'app'
- * Debug mode: on
-INFO:werkzeug:[31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
- * Running on all addresses (0.0.0.0)
- * Running on http://127.0.0.1:5000
- * Running on http://<your-local-ip>:5000
-```
+服务启动后，应用将在 `5000` 端口上运行。
 
 ### 5. 使用方法
 
